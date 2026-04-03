@@ -1,0 +1,59 @@
+{
+  "apps": [
+    {
+      "imageName": "adobe_express.png",
+      "appName": "Adobe Express",
+      "captions": [
+        "Design in minutes",
+        "Quick edits, clean results",
+        "Content creation made easy"
+      ],
+      "tags": ["design", "creative", "editing"],
+      "enabled": true
+    },
+    {
+      "imageName": "canva.png",
+      "appName": "Canva",
+      "captions": [
+        "Create stunning visuals",
+        "Design for everyone",
+        "Your ideas, beautifully made"
+      ],
+      "tags": ["design", "templates", "social"],
+      "enabled": true
+    },
+    {
+      "imageName": "figma.png",
+      "appName": "Figma",
+      "captions": [
+        "Collaborate in real time",
+        "Design together, build faster",
+        "Where ideas become products"
+      ],
+      "tags": ["design", "prototyping", "collaboration"],
+      "enabled": true
+    },
+    {
+      "imageName": "notion.png",
+      "appName": "Notion",
+      "captions": [
+        "Your workspace, your rules",
+        "All your notes in one place",
+        "Think, plan, organize"
+      ],
+      "tags": ["productivity", "notes", "organization"],
+      "enabled": true
+    },
+    {
+      "imageName": "linear.png",
+      "appName": "Linear",
+      "captions": [
+        "Ship faster with Linear",
+        "Built for modern teams",
+        "Issue tracking, reimagined"
+      ],
+      "tags": ["productivity", "project management", "dev tools"],
+      "enabled": true
+    }
+  ]
+}
