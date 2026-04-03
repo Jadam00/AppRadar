@@ -40,25 +40,33 @@ public sealed class GenerationService
         _logger.LogInformation("Count: {Count}, Duration: {Duration}s, Seed: {Seed}",
             options.Count, options.DurationSeconds, options.Seed?.ToString() ?? "random");
 
-        // Validate FFmpeg
-        _videoComposer.ValidateFfmpegAvailable();
+        // Resolve and log directories so Windows path issues are immediately visible
+        var workingDir = Directory.GetCurrentDirectory();
+        var inputDir = Path.GetFullPath(options.InputDirectory);
+        var outputDir = Path.GetFullPath(options.OutputDirectory);
+        _logger.LogInformation("Working directory : {Dir}", workingDir);
+        _logger.LogInformation("Input directory   : {Dir}", inputDir);
+        _logger.LogInformation("Output directory  : {Dir}", outputDir);
 
         // Ensure output directories exist
-        EnsureOutputDirectories(options.OutputDirectory);
+        EnsureOutputDirectories(outputDir);
 
-        // Load config
+        // Load config (must happen before FFmpeg validation so config paths are available)
         var configLoader = new ConfigLoader(
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigLoader>.Instance);
-        var config = configLoader.Load(options.InputDirectory);
+        var config = configLoader.Load(inputDir);
 
         // Override config from CLI
         if (options.Fps.HasValue) config.Video.Fps = options.Fps.Value;
         if (options.DurationSeconds > 0) config.Video.DefaultDurationSeconds = options.DurationSeconds;
 
+        // Validate FFmpeg (after config load so explicit tool paths in config are respected)
+        _videoComposer.ValidateFfmpegAvailable(config);
+
         // Load metadata
         _logger.LogInformation("Loading metadata...");
-        var (featuredDesc, featuredImagesDir) = _metadataLoader.LoadFeaturedApps(options.InputDirectory);
-        var (myAppsDesc, myAppsImagesDir) = _metadataLoader.LoadMyApps(options.InputDirectory);
+        var (featuredDesc, featuredImagesDir) = _metadataLoader.LoadFeaturedApps(inputDir);
+        var (myAppsDesc, myAppsImagesDir) = _metadataLoader.LoadMyApps(inputDir);
 
         // Validate
         _logger.LogInformation("Validating metadata...");
@@ -73,9 +81,9 @@ public sealed class GenerationService
         _logger.LogInformation("Validation passed: {FeaturedCount} featured, {MyAppCount} myApps",
             featuredSources.Count, myAppSources.Count);
 
-        var outputImagesDir = Path.Combine(options.OutputDirectory, "images");
-        var outputVideosDir = Path.Combine(options.OutputDirectory, "videos");
-        var outputManifestsDir = Path.Combine(options.OutputDirectory, "manifests");
+        var outputImagesDir = Path.Combine(outputDir, "images");
+        var outputVideosDir = Path.Combine(outputDir, "videos");
+        var outputManifestsDir = Path.Combine(outputDir, "manifests");
 
         // Generate each reel
         for (int i = 1; i <= options.Count; i++)

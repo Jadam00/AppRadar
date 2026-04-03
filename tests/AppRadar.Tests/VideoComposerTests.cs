@@ -1,3 +1,4 @@
+using AppRadar.Config;
 using AppRadar.Video;
 using Xunit;
 
@@ -33,5 +34,69 @@ public sealed class VideoComposerTests
     {
         int cycles = VideoComposer.CalculateCycleCount(1, 3, 4, 0.6);
         Assert.True(cycles >= 1);
+    }
+
+    [Fact]
+    public void FindFfmpegExe_ReturnsNullWhenExplicitPathDoesNotExist()
+    {
+        var config = new AppConfig
+        {
+            Tools = new ToolsConfig
+            {
+                FFmpegPath = @"C:\nonexistent\path\ffmpeg.exe"
+            }
+        };
+
+        // When an explicit path is configured but missing, FindFfmpegExe returns null
+        // (fail-fast rather than silently searching elsewhere)
+        var result = VideoComposer.FindFfmpegExe(config);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void FindFfmpegExe_UsesExplicitPathWhenItExists()
+    {
+        // Create a temporary file to act as a fake ffmpeg.exe
+        var fakePath = Path.Combine(Path.GetTempPath(), $"fake_ffmpeg_{Guid.NewGuid():N}.exe");
+        File.WriteAllText(fakePath, "fake");
+        try
+        {
+            var config = new AppConfig
+            {
+                Tools = new ToolsConfig { FFmpegPath = fakePath }
+            };
+
+            var result = VideoComposer.FindFfmpegExe(config);
+
+            Assert.Equal(fakePath, result);
+        }
+        finally
+        {
+            File.Delete(fakePath);
+        }
+    }
+
+    [Fact]
+    public void FindFfmpegExe_TrimsQuotesFromExplicitPath()
+    {
+        var fakePath = Path.Combine(Path.GetTempPath(), $"fake_ffmpeg_{Guid.NewGuid():N}.exe");
+        File.WriteAllText(fakePath, "fake");
+        try
+        {
+            // Simulate a user quoting the path in config.json
+            var config = new AppConfig
+            {
+                Tools = new ToolsConfig { FFmpegPath = $"\"{fakePath}\"" }
+            };
+
+            var result = VideoComposer.FindFfmpegExe(config);
+
+            Assert.Equal(fakePath, result);
+        }
+        finally
+        {
+            File.Delete(fakePath);
+        }
     }
 }

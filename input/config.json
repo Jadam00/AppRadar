@@ -18,5 +18,9 @@
   "animation": {
     "verticalDriftPixels": 60,
     "transitionDurationMs": 600
+  },
+  "tools": {
+    "ffmpegPath": null,
+    "ffprobePath": null
   }
 }

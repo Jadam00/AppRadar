@@ -54,11 +54,14 @@ public static class PlaceholderImageGenerator
                 ctx.FillPolygon(lighterColor, points);
             }
 
-            // Draw centered label text if font available
-            if (SystemFonts.TryGet("DejaVu Sans", out var family) ||
+            // Draw centered label text if font available.
+            // Try Windows fonts first, then cross-platform fallbacks.
+            if (SystemFonts.TryGet("Arial", out var family) ||
+                SystemFonts.TryGet("Segoe UI", out family) ||
+                SystemFonts.TryGet("Calibri", out family) ||
+                SystemFonts.TryGet("DejaVu Sans", out family) ||
                 SystemFonts.TryGet("Liberation Sans", out family) ||
-                SystemFonts.TryGet("FreeSans", out family) ||
-                SystemFonts.TryGet("Arial", out family))
+                SystemFonts.TryGet("FreeSans", out family))
             {
                 var font = family.CreateFont(80, FontStyle.Bold);
                 var textOptions = new RichTextOptions(font)
