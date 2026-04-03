@@ -1,0 +1,22 @@
+{
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "defaultDurationSeconds": 24,
+    "secondsPerSlide": 3
+  },
+  "overlay": {
+    "fontFamily": "Arial",
+    "fontSize": 72,
+    "fontColor": "#FFFFFF",
+    "padding": 64,
+    "maxTextWidthPercent": 0.82,
+    "bottomGradientOpacity": 0.55,
+    "textShadow": true
+  },
+  "animation": {
+    "verticalDriftPixels": 60,
+    "transitionDurationMs": 600
+  }
+}

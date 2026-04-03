@@ -416,3 +416,21 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# AppRadar generated output (keep directory structure via .gitkeep)
+output/images/*.png
+output/images/*.jpg
+output/videos/*.mp4
+output/manifests/*.json
+temp/*
+!temp/.gitkeep
+logs/*.log
+!logs/.gitkeep
+
+# Sample generated placeholder images (users provide their own)
+input/featuredApps/images/*.png
+input/featuredApps/images/*.jpg
+input/myApps/images/*.png
+input/myApps/images/*.jpg
+!input/featuredApps/images/.gitkeep
+!input/myApps/images/.gitkeep

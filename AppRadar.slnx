@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AppRadar/AppRadar.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AppRadar.Tests/AppRadar.Tests.csproj" />
+  </Folder>
+</Solution>

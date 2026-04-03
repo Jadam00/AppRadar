@@ -1,0 +1,26 @@
+{
+  "apps": [
+    {
+      "imageName": "my_app_1.png",
+      "appName": "My Awesome App",
+      "captions": [
+        "Built with passion",
+        "Your new favourite app",
+        "Try it today — free to start"
+      ],
+      "tags": ["app", "productivity", "utility"],
+      "enabled": true
+    },
+    {
+      "imageName": "my_app_2.png",
+      "appName": "My Second App",
+      "captions": [
+        "Simple. Powerful. Yours.",
+        "Designed for real people",
+        "Download and get started"
+      ],
+      "tags": ["app", "lifestyle"],
+      "enabled": true
+    }
+  ]
+}
