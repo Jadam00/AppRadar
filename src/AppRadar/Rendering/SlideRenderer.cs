@@ -129,7 +129,18 @@ public sealed class SlideRenderer
 
     private static Font ResolveFont(string familyName, float size)
     {
-        var families = new[] { familyName, "DejaVu Sans", "Liberation Sans", "FreeSans", "Arial" };
+        // Prefer the configured font family first, then Windows system fonts,
+        // then Linux/cross-platform fallbacks for completeness.
+        var families = new[]
+        {
+            familyName,
+            "Arial",
+            "Segoe UI",
+            "Calibri",
+            "DejaVu Sans",
+            "Liberation Sans",
+            "FreeSans"
+        };
         foreach (var name in families)
         {
             if (SystemFonts.TryGet(name, out var family))
@@ -138,11 +149,13 @@ public sealed class SlideRenderer
             }
         }
 
-        // If no system fonts found, use a fallback from the default font collection
-        // SixLabors.Fonts includes a built-in font in some versions
         throw new InvalidOperationException(
             $"Could not find a usable font. Tried: {string.Join(", ", families)}. " +
-            "Please ensure a compatible font is installed.");
+            "On Windows, Arial is built-in and should always be available. " +
+            "If you are using a custom font via the 'overlay.fontFamily' config setting, " +
+            "ensure the font is installed on this machine. " +
+            "You can also override with any installed font name in input\\config.json: " +
+            "{ \"overlay\": { \"fontFamily\": \"Arial\" } }");
     }
 
     private static Color ParseHexColor(string hex)

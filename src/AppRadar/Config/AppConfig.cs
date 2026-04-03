@@ -1,5 +1,28 @@
 namespace AppRadar.Config;
 
+/// <summary>
+/// Paths to external tools required by AppRadar.
+/// All settings are optional; AppRadar will search PATH and common Windows install locations
+/// if no explicit value is provided.
+/// </summary>
+public sealed class ToolsConfig
+{
+    /// <summary>
+    /// Full path to ffmpeg.exe.
+    /// Example: C:\ffmpeg\bin\ffmpeg.exe
+    /// Overrides automatic discovery when set.
+    /// Can also be set via the FFMPEG_PATH environment variable.
+    /// </summary>
+    public string? FFmpegPath { get; set; }
+
+    /// <summary>
+    /// Full path to ffprobe.exe (optional — not currently used in the pipeline).
+    /// Example: C:\ffmpeg\bin\ffprobe.exe
+    /// Can also be set via the FFPROBE_PATH environment variable.
+    /// </summary>
+    public string? FFprobePath { get; set; }
+}
+
 public sealed class VideoConfig
 {
     public int Width { get; set; } = 1080;
@@ -31,4 +54,5 @@ public sealed class AppConfig
     public VideoConfig Video { get; set; } = new();
     public OverlayConfig Overlay { get; set; } = new();
     public AnimationConfig Animation { get; set; } = new();
+    public ToolsConfig Tools { get; set; } = new();
 }
