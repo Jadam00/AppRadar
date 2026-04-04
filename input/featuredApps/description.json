@@ -1,7 +1,7 @@
 {
   "apps": [
     {
-      "imageName": "adobe_express.png",
+      "imageName": "AdobeExpress.png",
       "appName": "Adobe Express",
       "captions": [
         "Design in minutes",
@@ -12,7 +12,7 @@
       "enabled": true
     },
     {
-      "imageName": "canva.png",
+      "imageName": "canva.jpg",
       "appName": "Canva",
       "captions": [
         "Create stunning visuals",
@@ -23,7 +23,7 @@
       "enabled": true
     },
     {
-      "imageName": "figma.png",
+      "imageName": "figma.jpg",
       "appName": "Figma",
       "captions": [
         "Collaborate in real time",
@@ -34,7 +34,7 @@
       "enabled": true
     },
     {
-      "imageName": "notion.png",
+      "imageName": "notion.jpg",
       "appName": "Notion",
       "captions": [
         "Your workspace, your rules",

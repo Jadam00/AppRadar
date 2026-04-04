@@ -4,7 +4,7 @@
     "height": 1920,
     "fps": 30,
     "defaultDurationSeconds": 24,
-    "secondsPerSlide": 3
+    "secondsPerSlide": 4
   },
   "overlay": {
     "fontFamily": "Arial",

@@ -1,25 +1,47 @@
 {
   "apps": [
     {
-      "imageName": "my_app_1.png",
-      "appName": "My Awesome App",
+      "imageName": "Home_Light.png",
+      "appName": "NeuroMaze: Numbers Block Path",
       "captions": [
-        "Built with passion",
-        "Your new favourite app",
-        "Try it today — free to start"
+        "Train the brain.",
+        "Pure Logic",
+        "Endlessly difficult to master"
       ],
-      "tags": ["app", "productivity", "utility"],
+      "tags": ["app", "logic", "puzzle"],
       "enabled": true
     },
     {
-      "imageName": "my_app_2.png",
-      "appName": "My Second App",
+      "imageName": "Home_Dark.png",
+      "appName": "NeuroMaze: Numbers Block Path",
       "captions": [
-        "Simple. Powerful. Yours.",
-        "Designed for real people",
-        "Download and get started"
+        "Train the brain.",
+        "Pure Logic",
+        "Endlessly difficult to master"
       ],
-      "tags": ["app", "lifestyle"],
+      "tags": ["app", "logic", "puzzle"],
+      "enabled": true
+    },
+    {
+      "imageName": "LvlFail_Dark.png",
+      "appName": "NeuroMaze: Numbers Block Path",
+      "captions": [
+        "Train the brain.",
+        "Pure Logic",
+        "Endlessly difficult to master"
+      ],
+      "tags": ["app", "logic", "puzzle"],
+      "enabled": true
+    },
+    {
+      "imageName": "HardLvl_Dark.png",
+      "appName": "NeuroMaze: Numbers Block Path",
+      "captions": [
+        "Train the brain.",
+        "Pure Logic",
+        "Endlessly difficult to master"
+      ],
+      "tags": ["app", "logic", "puzzle"],
       "enabled": true
     }
   ]
