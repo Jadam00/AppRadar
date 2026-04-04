@@ -35,6 +35,12 @@ public sealed class SlideRenderer
 
         using var image = LoadAndCrop(slide.SourcePath, width, height);
 
+        // Draw top gradient overlay for app name readability
+        DrawTopGradient(image, width, overlay);
+
+        // Draw app name at the top of the slide
+        DrawAppName(image, slide.AppName, width, overlay);
+
         // Draw bottom gradient overlay for readability
         DrawBottomGradient(image, width, height, overlay);
 
@@ -89,6 +95,59 @@ public sealed class SlideRenderer
                 var rect = new Rectangle(0, gradientTop + (gradientHeight - 1 - y), width, 1);
                 ctx.Fill(Color.FromRgba(0, 0, 0, alpha), rect);
             }
+        });
+    }
+
+    private static void DrawTopGradient(Image<Rgba32> image, int width, OverlayConfig overlay)
+    {
+        // Draw a semi-transparent gradient from the top, covering roughly 20% of height
+        int gradientHeight = (int)(image.Height * 0.20);
+        byte maxAlpha = (byte)(overlay.BottomGradientOpacity * 255);
+
+        image.Mutate(ctx =>
+        {
+            for (int y = 0; y < gradientHeight; y++)
+            {
+                float t = (float)y / gradientHeight; // 0 = top row, 1 = bottom of gradient
+                float easedT = (1f - t) * (1f - t);  // quadratic fade upward
+                byte alpha = (byte)(maxAlpha * easedT);
+                var rect = new Rectangle(0, y, width, 1);
+                ctx.Fill(Color.FromRgba(0, 0, 0, alpha), rect);
+            }
+        });
+    }
+
+    private static void DrawAppName(Image<Rgba32> image, string appName, int width, OverlayConfig overlay)
+    {
+        var fontColor = ParseHexColor(overlay.FontColor);
+        var font = ResolveFont(overlay.FontFamily, overlay.FontSize);
+
+        float maxTextWidth = width * overlay.MaxTextWidthPercent;
+        float padding = overlay.Padding;
+
+        var textOptions = new RichTextOptions(font)
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+            WrappingLength = maxTextWidth,
+            Origin = new System.Numerics.Vector2(width / 2f, padding)
+        };
+
+        image.Mutate(ctx =>
+        {
+            if (overlay.TextShadow)
+            {
+                var shadowOptions = new RichTextOptions(font)
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    WrappingLength = maxTextWidth,
+                    Origin = new System.Numerics.Vector2(width / 2f + 3, padding + 3)
+                };
+                ctx.DrawText(shadowOptions, appName, Color.FromRgba(0, 0, 0, 160));
+            }
+
+            ctx.DrawText(textOptions, appName, fontColor);
         });
     }
 
