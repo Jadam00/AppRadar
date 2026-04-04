@@ -419,7 +419,7 @@ public sealed class ReelPlannerTests
     }
 
     [Fact]
-    public void Plan_StrategymodeIsStructuredMarketing()
+    public void Plan_StrategyModeIsStructuredMarketing()
     {
         var planner = CreatePlanner();
         var plan = planner.Plan(CreateFeaturedSources(5), CreateMyAppSources(2), new Random(1));

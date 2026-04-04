@@ -102,6 +102,8 @@ public sealed class SystemSpeechTtsProvider : ITtsProvider
 
     // ── Concatenation via FFmpeg ──────────────────────────────────────────────────────────────
 
+    private const double MinimumSegmentDurationSeconds = 0.5;
+
     /// <summary>
     /// Concatenates per-segment WAVs into a single output WAV, inserting silence
     /// at the start of each segment and between segments as configured.
@@ -134,7 +136,7 @@ public sealed class SystemSpeechTtsProvider : ITtsProvider
 
             // Re-sample to a consistent format and pad each segment to its target duration.
             // apad inserts silence at the end; atrim removes any excess.
-            double targetDur = Math.Max(segments[i].TargetDurationSeconds - leadInSec, 0.5);
+            double targetDur = Math.Max(segments[i].TargetDurationSeconds - leadInSec, MinimumSegmentDurationSeconds);
 
             filterParts.Append(
                 $"[{i}:a]" +
