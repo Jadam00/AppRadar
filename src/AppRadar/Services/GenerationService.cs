@@ -1,3 +1,4 @@
+using AppRadar.Audio;
 using AppRadar.Config;
 using AppRadar.Models;
 using AppRadar.Rendering;
@@ -12,26 +13,32 @@ public sealed class GenerationService
     private readonly MetadataLoader _metadataLoader;
     private readonly MetadataValidator _validator;
     private readonly SelectionService _selectionService;
+    private readonly ReelPlanner _reelPlanner;
     private readonly SlideRenderer _slideRenderer;
     private readonly VideoComposer _videoComposer;
     private readonly ManifestWriter _manifestWriter;
+    private readonly ILoggerFactory _loggerFactory;
 
     public GenerationService(
         ILogger<GenerationService> logger,
         MetadataLoader metadataLoader,
         MetadataValidator validator,
         SelectionService selectionService,
+        ReelPlanner reelPlanner,
         SlideRenderer slideRenderer,
         VideoComposer videoComposer,
-        ManifestWriter manifestWriter)
+        ManifestWriter manifestWriter,
+        ILoggerFactory loggerFactory)
     {
         _logger = logger;
         _metadataLoader = metadataLoader;
         _validator = validator;
         _selectionService = selectionService;
+        _reelPlanner = reelPlanner;
         _slideRenderer = slideRenderer;
         _videoComposer = videoComposer;
         _manifestWriter = manifestWriter;
+        _loggerFactory = loggerFactory;
     }
 
     public void RunGeneration(GenerationOptions options)
@@ -56,9 +63,23 @@ public sealed class GenerationService
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ConfigLoader>.Instance);
         var config = configLoader.Load(inputDir);
 
-        // Override config from CLI
+        // Apply CLI overrides
         if (options.Fps.HasValue) config.Video.Fps = options.Fps.Value;
         if (options.DurationSeconds > 0) config.Video.DefaultDurationSeconds = options.DurationSeconds;
+
+        // CLI audio override: --with-audio true|false
+        if (options.WithAudio.HasValue) config.Audio.Enabled = options.WithAudio.Value;
+
+        // CLI strategy override: --strategy structured|legacy
+        if (!string.IsNullOrWhiteSpace(options.Strategy))
+        {
+            config.Strategy.Mode = options.Strategy.Equals("legacy", StringComparison.OrdinalIgnoreCase)
+                ? "Legacy"
+                : "StructuredMarketing";
+        }
+
+        _logger.LogInformation("Strategy: {Strategy}, Audio: {Audio}",
+            config.Strategy.Mode, config.Audio.Enabled ? "enabled" : "disabled");
 
         // Validate FFmpeg (after config load so explicit tool paths in config are respected)
         _videoComposer.ValidateFfmpegAvailable(config);
@@ -84,6 +105,8 @@ public sealed class GenerationService
         var outputImagesDir = Path.Combine(outputDir, "images");
         var outputVideosDir = Path.Combine(outputDir, "videos");
         var outputManifestsDir = Path.Combine(outputDir, "manifests");
+        var outputAudioDir = Path.Combine(outputDir, "audio");
+        Directory.CreateDirectory(outputAudioDir);
 
         // Generate each reel
         for (int i = 1; i <= options.Count; i++)
@@ -98,7 +121,7 @@ public sealed class GenerationService
                 rng, seed,
                 featuredSources, myAppSources,
                 config,
-                outputImagesDir, outputVideosDir, outputManifestsDir,
+                outputImagesDir, outputVideosDir, outputManifestsDir, outputAudioDir,
                 options.DurationSeconds);
         }
 
@@ -114,12 +137,43 @@ public sealed class GenerationService
         string outputImagesDir,
         string outputVideosDir,
         string outputManifestsDir,
+        string outputAudioDir,
         int durationSeconds)
     {
         var generationId = $"reel_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
 
-        // Selection
-        var (slides, transition) = _selectionService.Select(featuredSources, myAppSources, rng);
+        List<SlideSelection> slides;
+        TransitionStyle transition;
+        string strategyMode;
+
+        bool useLegacy = config.Strategy.Mode.Equals("Legacy", StringComparison.OrdinalIgnoreCase);
+
+        if (useLegacy)
+        {
+            _logger.LogInformation("Using legacy shuffle strategy");
+            (slides, transition) = _selectionService.Select(featuredSources, myAppSources, rng);
+            strategyMode = "Legacy";
+        }
+        else
+        {
+            _logger.LogInformation("Using structured marketing strategy");
+            var plan = _reelPlanner.Plan(
+                featuredSources, myAppSources, rng, config.Video.SecondsPerSlide);
+            transition = plan.Transition;
+            strategyMode = "StructuredMarketing";
+
+            slides = plan.Slides.Select((p, idx) => new SlideSelection
+            {
+                Slot = idx + 1,
+                Role = p.Role,
+                SourceType = p.Source.SourceType,
+                AppName = p.Source.Entry.AppName,
+                ImageName = p.Source.Entry.ImageName,
+                SelectedCaption = p.DisplayCaption,
+                NarrationText = p.NarrationText,
+                SourcePath = p.Source.ImagePath
+            }).ToList();
+        }
 
         // Render slides
         _logger.LogInformation("Rendering {Count} slides...", slides.Count);
@@ -131,11 +185,22 @@ public sealed class GenerationService
             slidePaths.Add(slidePath);
         }
 
-        // Compose video
+        // Optionally generate TTS narration
+        string? audioPath = null;
+        bool hasAudio = false;
+
+        if (config.Audio.Enabled)
+        {
+            audioPath = TryGenerateNarration(
+                slides, config, generationId, outputAudioDir, durationSeconds);
+            hasAudio = audioPath is not null;
+        }
+
+        // Compose video (with optional audio mux)
         _logger.LogInformation("Composing video...");
         var videoPath = _videoComposer.ComposeVideo(
             slidePaths, outputVideosDir, generationId,
-            durationSeconds, transition, config);
+            durationSeconds, transition, config, audioPath);
 
         // Write manifest
         var manifest = new ReelManifest
@@ -148,6 +213,8 @@ public sealed class GenerationService
             Height = config.Video.Height,
             Fps = config.Video.Fps,
             TransitionStyle = transition.ToString(),
+            Strategy = strategyMode,
+            HasAudio = hasAudio,
             VideoPath = videoPath,
             SlidePaths = slidePaths,
             Slides = slides
@@ -155,7 +222,48 @@ public sealed class GenerationService
 
         _manifestWriter.WriteManifest(manifest, outputManifestsDir);
 
-        _logger.LogInformation("Reel {Id} complete", generationId);
+        _logger.LogInformation("Reel {Id} complete (strategy={Strategy}, audio={Audio})",
+            generationId, strategyMode, hasAudio);
+    }
+
+    private string? TryGenerateNarration(
+        List<SlideSelection> slides,
+        AppConfig config,
+        string generationId,
+        string outputAudioDir,
+        int durationSeconds)
+    {
+        try
+        {
+            var provider = TtsProviderFactory.Create(config.Audio, _loggerFactory);
+            if (!provider.IsAvailable)
+            {
+                _logger.LogWarning("TTS provider '{Provider}' is not available on this platform; skipping audio",
+                    config.Audio.TtsProvider);
+                return null;
+            }
+
+            var segments = slides.Select(s => new NarrationSegment
+            {
+                Text = string.IsNullOrWhiteSpace(s.NarrationText) ? s.SelectedCaption : s.NarrationText,
+                TargetDurationSeconds = config.Video.SecondsPerSlide
+            }).ToList();
+
+            var ffmpegExe = _videoComposer.GetFfmpegPath(config);
+            var audioPath = Path.Combine(outputAudioDir, $"{generationId}_narration.wav");
+
+            return provider.GenerateNarration(segments, audioPath, config.Audio, ffmpegExe);
+        }
+        catch (PlatformNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "TTS not available on this platform; producing silent video");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "TTS generation failed; producing silent video");
+            return null;
+        }
     }
 
     private static void EnsureOutputDirectories(string outputDirectory)
@@ -163,6 +271,7 @@ public sealed class GenerationService
         Directory.CreateDirectory(Path.Combine(outputDirectory, "images"));
         Directory.CreateDirectory(Path.Combine(outputDirectory, "videos"));
         Directory.CreateDirectory(Path.Combine(outputDirectory, "manifests"));
+        Directory.CreateDirectory(Path.Combine(outputDirectory, "audio"));
         Directory.CreateDirectory("temp");
         Directory.CreateDirectory("logs");
     }
@@ -176,4 +285,15 @@ public sealed class GenerationOptions
     public int? Fps { get; set; }
     public string InputDirectory { get; set; } = "input";
     public string OutputDirectory { get; set; } = "output";
+
+    /// <summary>
+    /// When set, overrides <see cref="AppConfig.Audio.Enabled"/> from config.
+    /// </summary>
+    public bool? WithAudio { get; set; }
+
+    /// <summary>
+    /// When set, overrides <see cref="AppConfig.Strategy.Mode"/> from config.
+    /// Accepted values: "structured", "legacy".
+    /// </summary>
+    public string? Strategy { get; set; }
 }

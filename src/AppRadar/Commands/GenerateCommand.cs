@@ -41,6 +41,16 @@ public static class GenerateCommand
             description: "Output directory path",
             getDefaultValue: () => "output");
 
+        var withAudioOption = new Option<bool?>(
+            name: "--with-audio",
+            description: "Generate and mux narration audio (true/false — overrides config audio.enabled)");
+        withAudioOption.IsRequired = false;
+
+        var strategyOption = new Option<string?>(
+            name: "--strategy",
+            description: "Narrative strategy: 'structured' (default) or 'legacy' (original random shuffle)");
+        strategyOption.IsRequired = false;
+
         var generateCommand = new Command("generate", "Generate marketing reel videos")
         {
             countOption,
@@ -48,11 +58,14 @@ public static class GenerateCommand
             seedOption,
             fpsOption,
             inputOption,
-            outputOption
+            outputOption,
+            withAudioOption,
+            strategyOption
         };
 
         generateCommand.SetHandler(
-            (int count, int duration, int? seed, int? fps, string input, string output) =>
+            (int count, int duration, int? seed, int? fps,
+             string input, string output, bool? withAudio, string? strategy) =>
             {
                 var logger = loggerFactory.CreateLogger("AppRadar.Commands.Generate");
                 logger.LogInformation("Starting generation: count={Count}, duration={Duration}s", count, duration);
@@ -62,9 +75,11 @@ public static class GenerateCommand
                     new MetadataLoader(loggerFactory.CreateLogger<MetadataLoader>()),
                     new MetadataValidator(loggerFactory.CreateLogger<MetadataValidator>()),
                     new SelectionService(loggerFactory.CreateLogger<SelectionService>()),
+                    new ReelPlanner(loggerFactory.CreateLogger<ReelPlanner>()),
                     new SlideRenderer(loggerFactory.CreateLogger<SlideRenderer>()),
                     new VideoComposer(loggerFactory.CreateLogger<VideoComposer>()),
-                    new ManifestWriter(loggerFactory.CreateLogger<ManifestWriter>()));
+                    new ManifestWriter(loggerFactory.CreateLogger<ManifestWriter>()),
+                    loggerFactory);
 
                 var options = new GenerationOptions
                 {
@@ -73,12 +88,15 @@ public static class GenerateCommand
                     Seed = seed,
                     Fps = fps,
                     InputDirectory = input,
-                    OutputDirectory = output
+                    OutputDirectory = output,
+                    WithAudio = withAudio,
+                    Strategy = strategy
                 };
 
                 service.RunGeneration(options);
             },
-            countOption, durationOption, seedOption, fpsOption, inputOption, outputOption);
+            countOption, durationOption, seedOption, fpsOption,
+            inputOption, outputOption, withAudioOption, strategyOption);
 
         return generateCommand;
     }

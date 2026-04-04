@@ -24,6 +24,12 @@ public sealed class VideoComposer
         _logger.LogInformation("FFmpeg resolved to: {Path}", path);
     }
 
+    /// <summary>
+    /// Returns the resolved FFmpeg path for use by other pipeline components (e.g. TTS).
+    /// Throws <see cref="InvalidOperationException"/> when FFmpeg cannot be found.
+    /// </summary>
+    public string GetFfmpegPath(AppConfig config) => ResolveFfmpegPath(config);
+
     private string ResolveFfmpegPath(AppConfig config)
     {
         var path = FindFfmpegExe(config, _logger);
@@ -222,7 +228,8 @@ public sealed class VideoComposer
         string generationId,
         int durationSeconds,
         TransitionStyle transition,
-        AppConfig config)
+        AppConfig config,
+        string? audioPath = null)
     {
         _logger.LogInformation("Composing video for reel {Id} with transition: {Transition}",
             generationId, transition);
@@ -262,16 +269,58 @@ public sealed class VideoComposer
             File.WriteAllText(filterFile, filterScript);
             _logger.LogDebug("FFmpeg filter graph written to: {File}", filterFile);
 
-            var args =
-                $"{string.Join(" ", inputArgs)} " +
-                $"-filter_complex_script \"{filterFile}\" " +
-                $"-map \"[outv]\" " +
-                $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
-                $"-r {fps} -t {durationSeconds} " +
-                $"-movflags +faststart " +
-                $"-y \"{outputPath}\"";
+            if (audioPath is not null && File.Exists(audioPath))
+            {
+                // Two-pass: (1) render silent video, (2) mux audio
+                var silentPath = Path.Combine(outputVideosDir, $"{generationId}_silent.mp4");
+                try
+                {
+                    var videoArgs =
+                        $"{string.Join(" ", inputArgs)} " +
+                        $"-filter_complex_script \"{filterFile}\" " +
+                        $"-map \"[outv]\" " +
+                        $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
+                        $"-r {fps} -t {durationSeconds} " +
+                        $"-movflags +faststart " +
+                        $"-an " +
+                        $"-y \"{silentPath}\"";
 
-            RunFfmpegProcess(ffmpegExe, args);
+                    RunFfmpegProcess(ffmpegExe, videoArgs);
+
+                    // Mux audio into final MP4
+                    var muxArgs =
+                        $"-i \"{silentPath}\" " +
+                        $"-i \"{audioPath}\" " +
+                        $"-c:v copy " +
+                        $"-c:a aac -b:a 128k " +
+                        $"-shortest " +
+                        $"-movflags +faststart " +
+                        $"-y \"{outputPath}\"";
+
+                    RunFfmpegProcess(ffmpegExe, muxArgs);
+                    _logger.LogInformation("Audio muxed into video successfully");
+                }
+                finally
+                {
+                    if (File.Exists(silentPath)) File.Delete(silentPath);
+                }
+            }
+            else
+            {
+                if (audioPath is not null)
+                    _logger.LogWarning("Audio file not found at {Path}; producing silent video", audioPath);
+
+                var args =
+                    $"{string.Join(" ", inputArgs)} " +
+                    $"-filter_complex_script \"{filterFile}\" " +
+                    $"-map \"[outv]\" " +
+                    $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
+                    $"-r {fps} -t {durationSeconds} " +
+                    $"-movflags +faststart " +
+                    $"-y \"{outputPath}\"";
+
+                RunFfmpegProcess(ffmpegExe, args);
+            }
         }
         finally
         {

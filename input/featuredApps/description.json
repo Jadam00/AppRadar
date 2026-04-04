@@ -8,6 +8,21 @@
         "Quick edits, clean results",
         "Content creation made easy"
       ],
+      "hookCaptions": [
+        "Still spending hours on design? Stop.",
+        "Most people overcomplicate content creation",
+        "Your designs shouldn't take all day"
+      ],
+      "painPointCaptions": [
+        "Great design tools are either too complex or too expensive",
+        "Most creators waste hours just making simple graphics",
+        "Not everyone has time to learn Photoshop"
+      ],
+      "credibilityCaptions": [
+        "Adobe Express makes pro-level design accessible",
+        "Clean results in minutes — no design degree needed",
+        "The shortcut to polished content"
+      ],
       "tags": ["design", "creative", "editing"],
       "enabled": true
     },
@@ -18,6 +33,21 @@
         "Create stunning visuals",
         "Design for everyone",
         "Your ideas, beautifully made"
+      ],
+      "hookCaptions": [
+        "What if anyone could design like a pro?",
+        "You don't need a designer — you need Canva",
+        "Stop settling for boring visuals"
+      ],
+      "painPointCaptions": [
+        "Blank canvas paralysis is real",
+        "Most design tools assume you already know what you're doing",
+        "Templates save hours — most people don't use them"
+      ],
+      "credibilityCaptions": [
+        "Canva: the world's most used design platform",
+        "Millions of templates, zero excuses",
+        "From idea to share-ready in under 5 minutes"
       ],
       "tags": ["design", "templates", "social"],
       "enabled": true
@@ -30,6 +60,21 @@
         "Design together, build faster",
         "Where ideas become products"
       ],
+      "hookCaptions": [
+        "Real collaboration shouldn't require a meeting",
+        "Design reviews that don't waste everyone's time",
+        "The way teams build products has changed"
+      ],
+      "painPointCaptions": [
+        "Design handoffs are a nightmare without the right tool",
+        "Version conflicts kill creative momentum",
+        "Too many tools, not enough collaboration"
+      ],
+      "credibilityCaptions": [
+        "Figma: where product teams ship faster",
+        "Design, prototype, and review — all in one place",
+        "Built for teams that move quickly"
+      ],
       "tags": ["design", "prototyping", "collaboration"],
       "enabled": true
     },
@@ -41,6 +86,21 @@
         "All your notes in one place",
         "Think, plan, organize"
       ],
+      "hookCaptions": [
+        "Your brain deserves a better second brain",
+        "Notes scattered everywhere? There's a better way",
+        "The productivity app people actually stick with"
+      ],
+      "painPointCaptions": [
+        "Switching between 5 different tools is killing your focus",
+        "Your notes are everywhere and nowhere at once",
+        "Most note apps don't scale with your thinking"
+      ],
+      "credibilityCaptions": [
+        "Notion replaces a dozen separate apps",
+        "One workspace for notes, tasks, wikis, and databases",
+        "The tool teams at top companies actually use"
+      ],
       "tags": ["productivity", "notes", "organization"],
       "enabled": true
     },
@@ -51,6 +111,21 @@
         "Ship faster with Linear",
         "Built for modern teams",
         "Issue tracking, reimagined"
+      ],
+      "hookCaptions": [
+        "Jira slowing your team down? There's a better way",
+        "Project management doesn't have to feel like work",
+        "Fast teams use fast tools"
+      ],
+      "painPointCaptions": [
+        "Issue trackers shouldn't be slower than the issues they track",
+        "Most teams spend more time managing work than doing it",
+        "Bloated tools kill shipping velocity"
+      ],
+      "credibilityCaptions": [
+        "Linear: the issue tracker built for speed",
+        "Loved by engineering teams who actually ship",
+        "Keyboard-first, opinionated, and blazing fast"
       ],
       "tags": ["productivity", "project management", "dev tools"],
       "enabled": true
