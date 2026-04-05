@@ -54,12 +54,18 @@ public sealed class PiperTtsProvider : ITtsProvider
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Returns <see langword="false"/> on non-Windows platforms — AppRadar is Windows-only.
+    /// Also returns <see langword="false"/> if any required file (exe, model, or model config)
+    /// is absent.
+    /// </remarks>
     public bool IsAvailable =>
         OperatingSystem.IsWindows() &&
         !string.IsNullOrWhiteSpace(_config.ExePath) &&
         !string.IsNullOrWhiteSpace(_config.ModelPath) &&
         File.Exists(_config.ExePath) &&
-        File.Exists(_config.ModelPath);
+        File.Exists(_config.ModelPath) &&
+        File.Exists(_config.ModelPath + ".json");
 
     /// <inheritdoc />
     public string GenerateNarration(
@@ -119,6 +125,14 @@ public sealed class PiperTtsProvider : ITtsProvider
                 "Download a voice model (.onnx) from https://huggingface.co/rhasspy/piper-voices " +
                 "and update audio.piper.modelPath in config.json.",
                 _config.ModelPath);
+
+        var modelConfigPath = _config.ModelPath + ".json";
+        if (!File.Exists(modelConfigPath))
+            throw new FileNotFoundException(
+                $"Piper model config not found: '{modelConfigPath}'. " +
+                "The .onnx.json sidecar file must be present in the same folder as the .onnx model. " +
+                "Download it alongside the .onnx file from https://huggingface.co/rhasspy/piper-voices.",
+                modelConfigPath);
     }
 
     // ── Synthesis ─────────────────────────────────────────────────────────────────────────────

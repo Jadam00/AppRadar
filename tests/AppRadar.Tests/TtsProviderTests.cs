@@ -159,8 +159,10 @@ public sealed class PiperTtsProviderTests
     public void GenerateNarration_WhenPiperFails_ThrowsInvalidOperationException()
     {
         // Use real files for path validation, then simulate a piper failure
-        var exePath   = CreateTempFile();
-        var modelPath = CreateTempFile();
+        var exePath    = CreateTempFile();
+        var modelPath  = CreateTempFile();
+        var modelJson  = modelPath + ".json";
+        File.WriteAllText(modelJson, "{}"); // create required .onnx.json sidecar
 
         try
         {
@@ -184,6 +186,7 @@ public sealed class PiperTtsProviderTests
         {
             TryDelete(exePath);
             TryDelete(modelPath);
+            TryDelete(modelJson);
         }
     }
 
