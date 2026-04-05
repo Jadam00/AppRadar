@@ -81,9 +81,9 @@ public sealed class PiperTtsProviderTests
     private static NullLogger<PiperTtsProvider> Logger =>
         NullLogger<PiperTtsProvider>.Instance;
 
-    private static Func<string, string, int, (int, string)> MockRunner(
+    private static Func<string, string, string, int, (int, string)> MockRunner(
         int exitCode, string stderr = "") =>
-        (_, _, _) => (exitCode, stderr);
+        (_, _, _, _) => (exitCode, stderr);
 
     // ── IsAvailable ───────────────────────────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ public sealed class PiperTtsProviderTests
             ModelPath = @"C:\models\en.onnx"
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hello", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
         Assert.Contains(@"--model ""C:\models\en.onnx""", args);
     }
@@ -215,13 +215,13 @@ public sealed class PiperTtsProviderTests
             ModelPath = @"C:\models\en.onnx"
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hello", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
         Assert.Contains(@"--output_file ""C:\out\seg.wav""", args);
     }
 
     [Fact]
-    public void BuildArguments_ContainsTextArg()
+    public void BuildArguments_DoesNotContainTextArg()
     {
         var config = new PiperConfig
         {
@@ -229,9 +229,9 @@ public sealed class PiperTtsProviderTests
             ModelPath = @"C:\models\en.onnx"
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hello world", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
-        Assert.Contains("--text \"Hello world\"", args);
+        Assert.DoesNotContain("--text", args);
     }
 
     [Fact]
@@ -246,7 +246,7 @@ public sealed class PiperTtsProviderTests
             NoiseW      = 0.9
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hi", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
         Assert.Contains("--length_scale 1.200", args);
         Assert.Contains("--noise_scale 0.500", args);
@@ -263,7 +263,7 @@ public sealed class PiperTtsProviderTests
             Speaker   = 2
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hello", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
         Assert.Contains("--speaker 2", args);
     }
@@ -278,20 +278,18 @@ public sealed class PiperTtsProviderTests
             Speaker   = null
         };
         var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
-        var args = provider.BuildArguments("Hello", @"C:\out\seg.wav");
+        var args = provider.BuildArguments(@"C:\out\seg.wav");
 
         Assert.DoesNotContain("--speaker", args);
     }
 
     [Fact]
-    public void BuildArguments_WhenTextExceedsMaxLength_ThrowsArgumentException()
+    public void ValidateText_WhenTextExceedsMaxLength_ThrowsArgumentException()
     {
-        var config   = new PiperConfig { ExePath = "piper.exe", ModelPath = @"C:\models\en.onnx" };
-        var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
         var longText = new string('x', PiperTtsProvider.MaxTextLengthChars + 1);
 
         Assert.Throws<ArgumentException>(() =>
-            provider.BuildArguments(longText, "out.wav"));
+            PiperTtsProvider.ValidateText(longText));
     }
 
     // ── Text sanitisation ─────────────────────────────────────────────────────────────────────
@@ -302,7 +300,7 @@ public sealed class PiperTtsProviderTests
     [InlineData("line1\nline2",     "line1 line2")]
     [InlineData("line1\r\nline2",   "line1 line2")]
     [InlineData("tab\there",        "tab here")]
-    [InlineData("say \"hello\"",    "say hello")]
+    [InlineData("say \"hello\"",    "say \"hello\"")]
     [InlineData("",                 "")]
     [InlineData("   ",              "")]
     public void SanitiseText_NormalisesInputCorrectly(string input, string expected)
