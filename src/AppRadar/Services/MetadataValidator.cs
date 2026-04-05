@@ -73,10 +73,13 @@ public sealed class MetadataValidator
 
     public void ValidateFeaturedCount(List<AppSource> sources)
     {
-        if (sources.Count < 3)
+        // Featured apps are optional in single-app mode (the reel app comes from myApps).
+        // Log a warning when empty so the operator knows, but do not block the pipeline.
+        if (sources.Count == 0)
         {
-            throw new ValidationException(
-                $"At least 3 enabled featured apps are required, but only {sources.Count} valid entries found.");
+            _logger.LogWarning(
+                "No valid featured app sources found. " +
+                "In StructuredMarketing mode the reel will be built from myApps only.");
         }
     }
 

@@ -90,19 +90,28 @@ public sealed class MetadataValidatorTests
     }
 
     [Fact]
-    public void ValidateFeaturedCount_ThrowsWhenFewerThan3()
+    public void ValidateFeaturedCount_DoesNotThrowWhenEmpty()
+    {
+        // Featured apps are optional in single-app mode; an empty list only triggers a warning.
+        var validator = CreateValidator();
+        var empty = new List<AppSource>();
+
+        // Should not throw
+        validator.ValidateFeaturedCount(empty);
+    }
+
+    [Fact]
+    public void ValidateFeaturedCount_AcceptsAnyNonNegativeCount()
     {
         var validator = CreateValidator();
-        var sources = new List<AppSource>
+        var two = new List<AppSource>
         {
             new() { Entry = new AppEntry(), SourceType = AppSourceType.Featured, ImagePath = "" },
             new() { Entry = new AppEntry(), SourceType = AppSourceType.Featured, ImagePath = "" }
         };
 
-        var ex = Assert.Throws<ValidationException>(() =>
-            validator.ValidateFeaturedCount(sources));
-
-        Assert.Contains("3", ex.Message);
+        // Should not throw for any count
+        validator.ValidateFeaturedCount(two);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using AppRadar.Audio;
 using AppRadar.Config;
+using AppRadar.Llm;
 using AppRadar.Models;
 using AppRadar.Rendering;
 using AppRadar.Video;
@@ -145,6 +146,10 @@ public sealed class GenerationService
         List<SlideSelection> slides;
         TransitionStyle transition;
         string strategyMode;
+        ReelStoryDraft? storyDraft = null;
+        ReelNarrationPlan? narrationPlan = null;
+        bool llmFallbackUsed = false;
+        string? llmModelUsed = null;
 
         bool useLegacy = config.Strategy.Mode.Equals("Legacy", StringComparison.OrdinalIgnoreCase);
 
@@ -156,11 +161,43 @@ public sealed class GenerationService
         }
         else
         {
-            _logger.LogInformation("Using structured marketing strategy");
+            _logger.LogInformation("Using structured single-app marketing strategy");
             var plan = _reelPlanner.Plan(
                 featuredSources, myAppSources, rng, config.Video.SecondsPerSlide);
             transition = plan.Transition;
             strategyMode = "StructuredMarketing";
+            storyDraft = plan.StoryDraft;
+
+            // ── LLM rewrite step ─────────────────────────────────────────────────────
+            if (storyDraft is not null)
+            {
+                var (narrationText, isLlmRewritten, modelUsed, fallbackUsed) =
+                    RewriteNarration(storyDraft, config);
+                llmFallbackUsed = fallbackUsed;
+                llmModelUsed = modelUsed;
+
+                // Update all slide display captions and narration text to reflect the
+                // rewritten narration — split into display chunks per slide.
+                // The chunks are assigned to slides in order; the full narration paragraph
+                // is also stored on the plan.
+                var chunkTexts = NarrationPlanner.SplitIntoChunks(narrationText);
+                for (int i = 0; i < plan.Slides.Count; i++)
+                {
+                    var chunkText = i < chunkTexts.Count ? chunkTexts[i] : string.Empty;
+                    plan.Slides[i].DisplayCaption = chunkText;
+                    plan.Slides[i].NarrationText = narrationText; // full paragraph for TTS
+                }
+
+                // Build initial narration plan (audio duration will be filled in after TTS)
+                narrationPlan = new ReelNarrationPlan
+                {
+                    FullNarrationText = narrationText,
+                    IsLlmRewritten = isLlmRewritten,
+                    LlmModelUsed = modelUsed
+                };
+
+                plan.NarrationPlan = narrationPlan;
+            }
 
             slides = plan.Slides.Select((p, idx) => new SlideSelection
             {
@@ -175,7 +212,7 @@ public sealed class GenerationService
             }).ToList();
         }
 
-        // Render slides
+        // Render slides (all slides use the same source image in structured mode)
         _logger.LogInformation("Rendering {Count} slides...", slides.Count);
         var slidePaths = new List<string>();
         foreach (var slide in slides)
@@ -188,19 +225,75 @@ public sealed class GenerationService
         // Optionally generate TTS narration
         string? audioPath = null;
         bool hasAudio = false;
+        int audioDurationMs = 0;
 
-        if (config.Audio.Enabled)
+        if (config.Audio.Enabled && narrationPlan is not null)
         {
+            // Single-narration TTS: pass the full paragraph once (not per-slide segments)
+            audioPath = TryGenerateSingleNarration(
+                narrationPlan.FullNarrationText, config, generationId, outputAudioDir);
+            hasAudio = audioPath is not null;
+
+            if (hasAudio && audioPath is not null)
+            {
+                audioDurationMs = WavDurationReader.ReadDurationMs(audioPath);
+                _logger.LogInformation("Audio duration: {Ms} ms", audioDurationMs);
+            }
+        }
+        else if (config.Audio.Enabled)
+        {
+            // Legacy path: per-slide segments
             audioPath = TryGenerateNarration(
                 slides, config, generationId, outputAudioDir, durationSeconds);
             hasAudio = audioPath is not null;
+
+            if (hasAudio && audioPath is not null)
+                audioDurationMs = WavDurationReader.ReadDurationMs(audioPath);
+        }
+
+        // Build final narration plan with measured audio duration and reveal timeline
+        if (narrationPlan is not null)
+        {
+            narrationPlan.ExpectedAudioDurationMs = audioDurationMs;
+            var revealChunks = NarrationPlanner.BuildRevealTimeline(
+                NarrationPlanner.SplitIntoChunks(narrationPlan.FullNarrationText),
+                audioDurationMs,
+                config.CaptionSync.TailHoldMs);
+            narrationPlan.DisplayChunks = revealChunks;
+
+            // Update slide captions to match reveal chunks (may have changed from initial split)
+            for (int i = 0; i < slides.Count; i++)
+            {
+                if (i < revealChunks.Count)
+                    slides[i].SelectedCaption = revealChunks[i].Text;
+            }
+        }
+
+        // Determine final video duration from narration (narration-driven) or config
+        int finalDurationMs;
+        int finalDurationSeconds;
+        if (audioDurationMs > 0)
+        {
+            finalDurationMs = Math.Max(
+                audioDurationMs + config.CaptionSync.TailHoldMs,
+                config.CaptionSync.MinVisualDurationMs);
+            finalDurationSeconds = (int)Math.Ceiling(finalDurationMs / 1000.0);
+            _logger.LogInformation(
+                "Narration-driven duration: {Ms} ms ({Seconds} s)", finalDurationMs, finalDurationSeconds);
+        }
+        else
+        {
+            finalDurationMs = Math.Max(
+                durationSeconds * 1000,
+                config.CaptionSync.MinVisualDurationMs);
+            finalDurationSeconds = (int)Math.Ceiling(finalDurationMs / 1000.0);
         }
 
         // Compose video (with optional audio mux)
         _logger.LogInformation("Composing video...");
         var videoPath = _videoComposer.ComposeVideo(
             slidePaths, outputVideosDir, generationId,
-            durationSeconds, transition, config, audioPath);
+            finalDurationSeconds, transition, config, audioPath);
 
         // Write manifest
         var manifest = new ReelManifest
@@ -208,7 +301,7 @@ public sealed class GenerationService
             GenerationId = generationId,
             CreatedUtc = DateTime.UtcNow,
             SeedUsed = seed,
-            DurationSeconds = durationSeconds,
+            DurationSeconds = finalDurationSeconds,
             Width = config.Video.Width,
             Height = config.Video.Height,
             Fps = config.Video.Fps,
@@ -217,13 +310,114 @@ public sealed class GenerationService
             HasAudio = hasAudio,
             VideoPath = videoPath,
             SlidePaths = slidePaths,
-            Slides = slides
+            Slides = slides,
+
+            // Single-app fields
+            SelectedAppName = storyDraft?.AppName,
+            SelectedImageName = storyDraft?.ImageName,
+            HookText = storyDraft?.HookText,
+            PainPointText = storyDraft?.PainPointText,
+            CredibilityText = storyDraft?.CredibilityText,
+            CtaText = storyDraft?.CtaText,
+
+            // Narration / LLM fields
+            NarrationText = narrationPlan?.FullNarrationText,
+            LlmModelUsed = llmModelUsed,
+            TtsProvider = config.Audio.Enabled ? config.Audio.TtsProvider : null,
+            AudioDurationMs = audioDurationMs,
+            FinalVideoDurationMs = finalDurationMs,
+            LlmFallbackUsed = llmFallbackUsed,
+            RevealTimeline = narrationPlan?.DisplayChunks
         };
 
         _manifestWriter.WriteManifest(manifest, outputManifestsDir);
 
-        _logger.LogInformation("Reel {Id} complete (strategy={Strategy}, audio={Audio})",
-            generationId, strategyMode, hasAudio);
+        _logger.LogInformation("Reel {Id} complete (strategy={Strategy}, audio={Audio}, duration={Dur}s)",
+            generationId, strategyMode, hasAudio, finalDurationSeconds);
+    }
+
+    /// <summary>
+    /// Calls the configured LLM provider to rewrite the 4-stage draft into one narration
+    /// paragraph.  Falls back to deterministic join when LLM is disabled, unavailable, or fails.
+    /// Returns (text, isLlmRewritten, modelUsed, fallbackUsed).
+    /// </summary>
+    private (string text, bool isLlmRewritten, string? modelUsed, bool fallbackUsed) RewriteNarration(
+        ReelStoryDraft draft, AppConfig config)
+    {
+        var provider = CaptionRewriteProviderFactory.Create(config.Llm, _loggerFactory);
+
+        if (provider is DeterministicCaptionJoiner)
+        {
+            var fallbackText = DeterministicCaptionJoiner.Join(
+                draft.HookText, draft.PainPointText, draft.CredibilityText, draft.CtaText);
+            return (fallbackText, false, null, false);
+        }
+
+        try
+        {
+            // Run the async rewrite on the thread-pool to avoid potential deadlocks when
+            // this synchronous method is called from a non-async call chain.
+            // In this Windows console app there is no SynchronizationContext, so
+            // Task.Run is still the safest pattern here.
+            var rewritten = Task.Run(() => provider.RewriteAsync(draft)).GetAwaiter().GetResult();
+            return (rewritten, true, provider.ProviderName, false);
+        }
+        catch (CaptionRewriteException ex)
+        {
+            _logger.LogWarning(ex, "LLM rewrite failed — falling back to deterministic join");
+            var fallbackText = DeterministicCaptionJoiner.Join(
+                draft.HookText, draft.PainPointText, draft.CredibilityText, draft.CtaText);
+            return (fallbackText, false, provider.ProviderName, true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error in LLM rewrite — falling back to deterministic join");
+            var fallbackText = DeterministicCaptionJoiner.Join(
+                draft.HookText, draft.PainPointText, draft.CredibilityText, draft.CtaText);
+            return (fallbackText, false, null, true);
+        }
+    }
+
+    /// <summary>
+    /// Generates TTS narration from a single full narration paragraph.
+    /// Used in structured single-app mode.
+    /// </summary>
+    private string? TryGenerateSingleNarration(
+        string narrationText,
+        AppConfig config,
+        string generationId,
+        string outputAudioDir)
+    {
+        try
+        {
+            var provider = TtsProviderFactory.Create(config.Audio, _loggerFactory);
+            if (!provider.IsAvailable)
+            {
+                _logger.LogWarning("TTS provider '{Provider}' is not available on this platform; skipping audio",
+                    config.Audio.TtsProvider);
+                return null;
+            }
+
+            var segments = new List<NarrationSegment>
+            {
+                new() { Text = narrationText, TargetDurationSeconds = 0 }
+            };
+
+            var ffmpegExe = _videoComposer.GetFfmpegPath(config);
+            var audioPath = Path.Combine(outputAudioDir, $"{generationId}_narration.wav");
+
+            return provider.GenerateNarration(segments, audioPath, config.Audio, ffmpegExe);
+        }
+        catch (PlatformNotSupportedException ex)
+        {
+            _logger.LogWarning(ex, "TTS not available on this platform; producing silent video");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "TTS generation failed; producing silent video");
+            return null;
+        }
     }
 
     private string? TryGenerateNarration(

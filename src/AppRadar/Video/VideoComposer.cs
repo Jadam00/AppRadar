@@ -287,13 +287,16 @@ public sealed class VideoComposer
 
                     RunFfmpegProcess(ffmpegExe, videoArgs);
 
-                    // Mux audio into final MP4
+                    // Mux audio into final MP4.
+                    // Do NOT use -shortest here: the video duration is already computed to
+                    // match the narration audio length (narration-driven duration), so both
+                    // streams should end at approximately the same time.
+                    // Use -c:a aac to encode the audio and map both streams explicitly.
                     var muxArgs =
                         $"-i \"{silentPath}\" " +
                         $"-i \"{audioPath}\" " +
                         $"-c:v copy " +
                         $"-c:a aac -b:a 128k " +
-                        $"-shortest " +
                         $"-movflags +faststart " +
                         $"-y \"{outputPath}\"";
 

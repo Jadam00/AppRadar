@@ -44,5 +44,21 @@
   "strategy": {
     "mode": "StructuredMarketing",
     "allowLegacyShuffleMode": true
+  },
+  "llm": {
+    "enabled": false,
+    "provider": "Ollama",
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "model": "qwen3:8b",
+      "timeoutSeconds": 30,
+      "temperature": 0.4
+    },
+    "fallbackToDeterministicJoin": true
+  },
+  "captionSync": {
+    "mode": "Chunked",
+    "tailHoldMs": 800,
+    "minVisualDurationMs": 4000
   }
 }
