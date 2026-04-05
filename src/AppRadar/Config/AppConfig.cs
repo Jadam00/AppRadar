@@ -50,6 +50,45 @@ public sealed class AnimationConfig
 }
 
 /// <summary>
+/// Configuration for the Piper neural TTS engine.
+/// Required when <see cref="AudioConfig.TtsProvider"/> is <c>"Piper"</c>.
+/// </summary>
+public sealed class PiperConfig
+{
+    /// <summary>
+    /// Full path to <c>piper.exe</c>.
+    /// Example: <c>C:\piper\piper.exe</c>
+    /// </summary>
+    public string ExePath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Full path to the voice model file (<c>.onnx</c>).
+    /// Example: <c>C:\piper\models\en_GB-alan-medium.onnx</c>
+    /// </summary>
+    public string ModelPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Speaker ID for multi-speaker models. Leave <c>null</c> for single-speaker models.
+    /// </summary>
+    public int? Speaker { get; set; }
+
+    /// <summary>
+    /// Controls speech speed. Values below 1.0 speed up, above 1.0 slow down. Default 1.0.
+    /// </summary>
+    public double LengthScale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Controls voice variation/expressiveness. Default 0.667.
+    /// </summary>
+    public double NoiseScale { get; set; } = 0.667;
+
+    /// <summary>
+    /// Controls phoneme duration variation. Default 0.8.
+    /// </summary>
+    public double NoiseW { get; set; } = 0.8;
+}
+
+/// <summary>
 /// Configuration for TTS narration audio generation.
 /// </summary>
 public sealed class AudioConfig
@@ -61,7 +100,8 @@ public sealed class AudioConfig
     public bool Enabled { get; set; } = false;
 
     /// <summary>
-    /// TTS provider to use. Currently supported: "SystemSpeech" (Windows only).
+    /// TTS provider to use. Supported values: <c>"SystemSpeech"</c> (Windows SAPI),
+    /// <c>"Piper"</c> (Piper neural TTS).
     /// </summary>
     public string TtsProvider { get; set; } = "SystemSpeech";
 
@@ -95,6 +135,11 @@ public sealed class AudioConfig
     /// When true, applies FFmpeg loudnorm filter to even out audio levels.
     /// </summary>
     public bool NormalizeAudio { get; set; } = true;
+
+    /// <summary>
+    /// Piper TTS engine configuration. Required when <see cref="TtsProvider"/> is <c>"Piper"</c>.
+    /// </summary>
+    public PiperConfig Piper { get; set; } = new();
 }
 
 /// <summary>
