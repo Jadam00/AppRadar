@@ -229,7 +229,8 @@ public sealed class VideoComposer
         int durationSeconds,
         TransitionStyle transition,
         AppConfig config,
-        string? audioPath = null)
+        string? audioPath = null,
+        IReadOnlyList<int>? slideDurationsMs = null)
     {
         _logger.LogInformation("Composing video for reel {Id} with transition: {Transition}",
             generationId, transition);
@@ -246,21 +247,42 @@ public sealed class VideoComposer
         int driftPixels = config.Animation.VerticalDriftPixels;
         int transitionMs = config.Animation.TransitionDurationMs;
 
-        int cycleCount = CalculateCycleCount(durationSeconds, secondsPerSlide, slidePaths.Count,
-            transitionMs / 1000.0);
-        int totalSlides = slidePaths.Count * cycleCount;
+        bool usePerSlideDurations = slideDurationsMs is not null
+            && slideDurationsMs.Count == slidePaths.Count
+            && slidePaths.Count > 0;
 
+        int totalSlides;
+        double[] perSlideDurs;
         var inputArgs = new List<string>();
-        for (int cycle = 0; cycle < cycleCount; cycle++)
+
+        if (usePerSlideDurations)
         {
-            foreach (var slidePath in slidePaths)
+            // Narration-driven mode: each slide has its own duration; no cycling needed.
+            totalSlides = slidePaths.Count;
+            perSlideDurs = slideDurationsMs!.Select(ms => ms / 1000.0).ToArray();
+            for (int i = 0; i < slidePaths.Count; i++)
             {
-                inputArgs.Add($"-loop 1 -t {secondsPerSlide} -i \"{slidePath}\"");
+                inputArgs.Add($"-loop 1 -t {perSlideDurs[i]:F3} -i \"{slidePaths[i]}\"");
+            }
+        }
+        else
+        {
+            // Legacy cycling mode: repeat slide sequence to fill the requested duration.
+            int cycleCount = CalculateCycleCount(durationSeconds, secondsPerSlide, slidePaths.Count,
+                transitionMs / 1000.0);
+            totalSlides = slidePaths.Count * cycleCount;
+            perSlideDurs = Enumerable.Repeat((double)secondsPerSlide, totalSlides).ToArray();
+            for (int cycle = 0; cycle < cycleCount; cycle++)
+            {
+                foreach (var slidePath in slidePaths)
+                {
+                    inputArgs.Add($"-loop 1 -t {secondsPerSlide} -i \"{slidePath}\"");
+                }
             }
         }
 
         var filterScript = BuildFilterGraph(
-            totalSlides, fps, secondsPerSlide, durationSeconds,
+            totalSlides, fps, perSlideDurs, durationSeconds,
             width, height, driftPixels, transitionMs, transition);
 
         var filterFile = Path.GetTempFileName();
@@ -348,10 +370,25 @@ public sealed class VideoComposer
         return Math.Max(cyclesNeeded, 1);
     }
 
-    private static string BuildFilterGraph(
+    /// <summary>
+    /// Builds an FFmpeg filter_complex script for the given slides.
+    /// Each slide animates upward with a subtle vertical drift during its hold duration.
+    /// Slides are connected by xfade transitions; <see cref="TransitionStyle.Slide"/> uses
+    /// <c>slideup</c> for vertical scroll, <see cref="TransitionStyle.Crossfade"/> uses <c>fade</c>.
+    /// </summary>
+    /// <param name="totalSlides">Total number of input slide streams (after cycling, if any).</param>
+    /// <param name="fps">Output frame rate.</param>
+    /// <param name="slideDurationsSeconds">Per-slide hold duration in seconds; length must equal <paramref name="totalSlides"/>.</param>
+    /// <param name="durationSeconds">Maximum output duration used for the final trim.</param>
+    /// <param name="width">Canvas width in pixels.</param>
+    /// <param name="height">Canvas height in pixels.</param>
+    /// <param name="driftPixels">Pixels of vertical drift per slide (subtle upward motion within a slide).</param>
+    /// <param name="transitionMs">Duration of each xfade transition in milliseconds.</param>
+    /// <param name="transition">Transition style selection.</param>
+    internal static string BuildFilterGraph(
         int totalSlides,
         int fps,
-        int secondsPerSlide,
+        double[] slideDurationsSeconds,
         int durationSeconds,
         int width,
         int height,
@@ -361,14 +398,17 @@ public sealed class VideoComposer
     {
         var sb = new System.Text.StringBuilder();
         int scaledHeight = height + driftPixels * 2;
+        double transitionDuration = transitionMs / 1000.0;
+        string transitionType = transition == TransitionStyle.Crossfade ? "fade" : "slideup";
 
         for (int i = 0; i < totalSlides; i++)
         {
+            double slideDur = slideDurationsSeconds[i];
             sb.AppendLine(
                 $"[{i}:v]" +
                 $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
                 $"crop={width}:{scaledHeight}," +
-                $"crop={width}:{height}:0:'min(t/{secondsPerSlide}*{driftPixels},{driftPixels})'," +
+                $"crop={width}:{height}:0:'min(t/{slideDur:F3}*{driftPixels},{driftPixels})'," +
                 $"setpts=PTS-STARTPTS" +
                 $"[v{i}];");
         }
@@ -379,14 +419,13 @@ public sealed class VideoComposer
             return sb.ToString();
         }
 
-        double segDuration = secondsPerSlide;
-        double transitionDuration = transitionMs / 1000.0;
-        string transitionType = transition == TransitionStyle.Crossfade ? "fade" : "slideleft";
-
         string prev = "v0";
+        double cumulativeDuration = 0;
+
         for (int i = 1; i < totalSlides; i++)
         {
-            double offset = i * (segDuration - transitionDuration);
+            cumulativeDuration += slideDurationsSeconds[i - 1];
+            double offset = cumulativeDuration - i * transitionDuration;
             if (offset < 0.001) offset = 0.001;
 
             bool isLast = (i == totalSlides - 1);

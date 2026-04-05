@@ -252,6 +252,7 @@ public sealed class GenerationService
         }
 
         // Build final narration plan with measured audio duration and reveal timeline
+        List<int>? structuredSlideDurationsMs = null;
         if (narrationPlan is not null)
         {
             narrationPlan.ExpectedAudioDurationMs = audioDurationMs;
@@ -267,6 +268,9 @@ public sealed class GenerationService
                 if (i < revealChunks.Count)
                     slides[i].SelectedCaption = revealChunks[i].Text;
             }
+
+            // Build per-slide duration list so video composition matches the narration pacing.
+            structuredSlideDurationsMs = BuildPerSlideDurationsMs(revealChunks, slidePaths.Count);
         }
 
         // Determine final video duration from narration (narration-driven) or config
@@ -289,11 +293,12 @@ public sealed class GenerationService
             finalDurationSeconds = (int)Math.Ceiling(finalDurationMs / 1000.0);
         }
 
-        // Compose video (with optional audio mux)
+        // Compose video (with optional audio mux and narration-driven per-slide durations)
         _logger.LogInformation("Composing video...");
         var videoPath = _videoComposer.ComposeVideo(
             slidePaths, outputVideosDir, generationId,
-            finalDurationSeconds, transition, config, audioPath);
+            finalDurationSeconds, transition, config, audioPath,
+            structuredSlideDurationsMs);
 
         // Write manifest
         var manifest = new ReelManifest
@@ -458,6 +463,32 @@ public sealed class GenerationService
             _logger.LogError(ex, "TTS generation failed; producing silent video");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Converts a reveal timeline into a per-slide duration list for narration-driven video composition.
+    /// When the chunk count matches <paramref name="slideCount"/>, each slide gets its exact chunk duration.
+    /// When counts differ, the total duration is distributed equally across all slides so the reel
+    /// still fills the correct total length.
+    /// Returns null when no timing information is available.
+    /// </summary>
+    private static List<int>? BuildPerSlideDurationsMs(
+        IReadOnlyList<DisplayChunk> revealChunks,
+        int slideCount)
+    {
+        if (revealChunks.Count == 0 || slideCount == 0)
+            return null;
+
+        if (revealChunks.Count == slideCount)
+            return revealChunks.Select(c => c.DurationMs).ToList();
+
+        // Counts differ: distribute total audio+tail duration equally across slides.
+        int totalMs = revealChunks.Sum(c => c.DurationMs);
+        int equalMs = totalMs / slideCount;
+        int remainder = totalMs - equalMs * slideCount;
+        return Enumerable.Range(0, slideCount)
+            .Select(i => i == slideCount - 1 ? equalMs + remainder : equalMs)
+            .ToList();
     }
 
     private static void EnsureOutputDirectories(string outputDirectory)

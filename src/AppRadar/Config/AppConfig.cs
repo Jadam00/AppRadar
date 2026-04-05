@@ -39,8 +39,8 @@ public sealed class OverlayConfig
     public string FontColor { get; set; } = "#FFFFFF";
     public int Padding { get; set; } = 64;
     public float MaxTextWidthPercent { get; set; } = 0.82f;
-    public float BottomGradientOpacity { get; set; } = 0.55f;
-    public bool TextShadow { get; set; } = true;
+    public float BottomGradientOpacity { get; set; } = 0.0f;
+    public bool TextShadow { get; set; } = false;
 }
 
 public sealed class AnimationConfig

@@ -142,8 +142,8 @@ public sealed class ReelPlanner
             CtaText        = ctaCaption
         };
 
-        // Choose transition
-        var transition = (TransitionStyle)rng.Next(0, 2);
+        // Structured mode always uses vertical scroll for consistent upward motion
+        var transition = TransitionStyle.Slide;
         _logger.LogInformation("Transition: {Transition}", transition);
 
         // Assemble plan — all slides use the SAME source image
