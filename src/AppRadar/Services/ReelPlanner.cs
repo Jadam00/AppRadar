@@ -4,8 +4,13 @@ using Microsoft.Extensions.Logging;
 namespace AppRadar.Services;
 
 /// <summary>
-/// Builds a deterministic, structured 4-stage marketing <see cref="ReelPlan"/> from the
-/// available app sources.
+/// Builds a deterministic, structured 4-stage marketing <see cref="ReelPlan"/> from a
+/// single selected app.
+///
+/// Single-app mode (default):
+///   Selects exactly ONE app and ONE image. All four narrative stages
+///   (Hook, PainPoint, Credibility, CTA) are drawn from that single app's caption
+///   pools. The result is a cohesive one-app mini-advert.
 ///
 /// The four stages are:
 ///   1. Hook        — Stop the scroll; tension / curiosity / bold claim
@@ -82,71 +87,77 @@ public sealed class ReelPlanner
     }
 
     /// <summary>
-    /// Builds a complete <see cref="ReelPlan"/> for one reel.
+    /// Builds a complete single-app <see cref="ReelPlan"/> for one reel.
+    ///
+    /// Selects exactly ONE app and ONE image.  All four stages draw captions from
+    /// that same app.  Prefers <paramref name="myAppSources"/> (the app being promoted)
+    /// and falls back to <paramref name="featuredSources"/> when myApps is empty.
     /// </summary>
-    /// <param name="featuredSources">All valid featured app sources (≥ 3 required).</param>
-    /// <param name="myAppSources">All valid myApp sources (≥ 1 required).</param>
+    /// <param name="featuredSources">Available featured app sources.</param>
+    /// <param name="myAppSources">Available myApp sources (preferred for the reel app).</param>
     /// <param name="rng">Seeded RNG for deterministic output.</param>
-    /// <param name="secondsPerSlide">Target display duration per slide.</param>
+    /// <param name="secondsPerSlide">Target display duration per caption chunk (default 4 s).</param>
     public ReelPlan Plan(
         List<AppSource> featuredSources,
         List<AppSource> myAppSources,
         Random rng,
         int secondsPerSlide = 4)
     {
-        _logger.LogInformation("Building structured reel plan ({FeaturedCount} featured, {MyAppCount} myApps)",
-            featuredSources.Count, myAppSources.Count);
+        // Prefer myAppSources as the "your app" being advertised; fall back to featured
+        var candidatePool = myAppSources.Count > 0 ? myAppSources : featuredSources;
 
-        // --- Pick apps for each role --------------------------------------------------------
+        if (candidatePool.Count == 0)
+            throw new InvalidOperationException(
+                "No app sources available — cannot build a reel plan.");
 
-        // Prefer apps with distinct tags across the reel for variety.
-        var featuredPool = featuredSources.ToList();
-        var hookApp = PickWithTagDiversity(featuredPool, [], rng);
-        featuredPool.Remove(hookApp);
-
-        var painApp = PickWithTagDiversity(featuredPool, [hookApp], rng);
-        featuredPool.Remove(painApp);
-
-        var credApp = PickWithTagDiversity(featuredPool, [hookApp, painApp], rng);
-
-        var ctaApp = PickUnique(myAppSources, rng);
+        // Select exactly ONE app entry (and therefore ONE image)
+        var selectedSource = PickUnique(candidatePool, rng);
 
         _logger.LogInformation(
-            "Role assignments — Hook: {Hook}, PainPoint: {Pain}, Credibility: {Cred}, CTA: {Cta}",
-            hookApp.Entry.AppName, painApp.Entry.AppName,
-            credApp.Entry.AppName, ctaApp.Entry.AppName);
+            "Single-app reel: selected '{App}' (image: {Image})",
+            selectedSource.Entry.AppName, selectedSource.Entry.ImageName);
 
-        // --- Select captions for each role --------------------------------------------------
-
+        // Build 4 stage captions from the SAME app
         var usedTexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var hookCaption = SelectCaption(hookApp, SlideRole.Hook, rng, usedTexts);
-        var painCaption = SelectCaption(painApp, SlideRole.PainPoint, rng, usedTexts);
-        var credCaption = SelectCaption(credApp, SlideRole.Credibility, rng, usedTexts);
-        var ctaCaption = SelectCaption(ctaApp, SlideRole.Cta, rng, usedTexts);
+        var hookCaption   = SelectCaption(selectedSource, SlideRole.Hook,         rng, usedTexts);
+        var painCaption   = SelectCaption(selectedSource, SlideRole.PainPoint,    rng, usedTexts);
+        var credCaption   = SelectCaption(selectedSource, SlideRole.Credibility,  rng, usedTexts);
+        var ctaCaption    = SelectCaption(selectedSource, SlideRole.Cta,          rng, usedTexts);
 
-        _logger.LogInformation("Hook caption     : \"{Caption}\"", hookCaption);
-        _logger.LogInformation("PainPoint caption: \"{Caption}\"", painCaption);
+        _logger.LogInformation("Hook caption       : \"{Caption}\"", hookCaption);
+        _logger.LogInformation("PainPoint caption  : \"{Caption}\"", painCaption);
         _logger.LogInformation("Credibility caption: \"{Caption}\"", credCaption);
-        _logger.LogInformation("CTA caption      : \"{Caption}\"", ctaCaption);
+        _logger.LogInformation("CTA caption        : \"{Caption}\"", ctaCaption);
 
-        // --- Choose transition --------------------------------------------------------------
+        // Build story draft (pre-LLM structured model)
+        var storyDraft = new ReelStoryDraft
+        {
+            AppName        = selectedSource.Entry.AppName,
+            ImageName      = selectedSource.Entry.ImageName,
+            Tags           = string.Join(", ", selectedSource.Entry.Tags),
+            HookText       = hookCaption,
+            PainPointText  = painCaption,
+            CredibilityText = credCaption,
+            CtaText        = ctaCaption
+        };
 
+        // Choose transition
         var transition = (TransitionStyle)rng.Next(0, 2);
         _logger.LogInformation("Transition: {Transition}", transition);
 
-        // --- Assemble plan ------------------------------------------------------------------
-
+        // Assemble plan — all slides use the SAME source image
         return new ReelPlan
         {
-            Transition = transition,
+            Transition   = transition,
             StrategyMode = "StructuredMarketing",
+            StoryDraft   = storyDraft,
             Slides =
             [
-                MakeSlidePlan(SlideRole.Hook, hookApp, hookCaption, secondsPerSlide),
-                MakeSlidePlan(SlideRole.PainPoint, painApp, painCaption, secondsPerSlide),
-                MakeSlidePlan(SlideRole.Credibility, credApp, credCaption, secondsPerSlide),
-                MakeSlidePlan(SlideRole.Cta, ctaApp, ctaCaption, secondsPerSlide),
+                MakeSlidePlan(SlideRole.Hook,        selectedSource, hookCaption,  secondsPerSlide),
+                MakeSlidePlan(SlideRole.PainPoint,   selectedSource, painCaption,  secondsPerSlide),
+                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption,  secondsPerSlide),
+                MakeSlidePlan(SlideRole.Cta,         selectedSource, ctaCaption,   secondsPerSlide),
             ]
         };
     }
@@ -156,7 +167,9 @@ public sealed class ReelPlanner
     /// <summary>
     /// Selects the best caption for a given role from the app's caption pools.
     /// Priority: role-specific pool → generic captions → built-in template.
-    /// Among valid candidates, the highest-scoring caption is chosen.
+    /// Within each pool, the highest-scoring caption is chosen.
+    /// Role-specific captions are always preferred over generic ones when a non-duplicate
+    /// candidate exists in the role-specific pool.
     /// </summary>
     internal string SelectCaption(
         AppSource source,
@@ -164,42 +177,43 @@ public sealed class ReelPlanner
         Random rng,
         ISet<string> usedTexts)
     {
-        var candidates = BuildCandidatePool(source, role, rng);
+        // 1. Try role-specific pool first (hard priority — best caption from this pool wins
+        //    over any generic caption, regardless of score).
+        var roleSpecific = GetRoleSpecificCaptions(source.Entry, role);
+        if (roleSpecific is { Count: > 0 })
+        {
+            var rsRanked = roleSpecific
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => (text: c, score: ScoreCaption(c, role, usedTexts)))
+                .OrderByDescending(x => x.score)
+                .ToList();
 
-        // Score and rank; filter already-used text
-        var ranked = candidates
+            var bestRs = rsRanked.FirstOrDefault(x => !usedTexts.Contains(x.text)).text;
+            if (bestRs is not null)
+            {
+                usedTexts.Add(bestRs);
+                return bestRs;
+            }
+        }
+
+        // 2. Fall back to generic captions and templates scored together.
+        var fallbackPool = new List<string>();
+        if (source.Entry.Captions is { Count: > 0 })
+            fallbackPool.AddRange(source.Entry.Captions);
+        fallbackPool.Add(BuildTemplate(source.Entry, role, rng));
+
+        var ranked = fallbackPool
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .Select(c => (text: c, score: ScoreCaption(c, role, usedTexts)))
             .OrderByDescending(x => x.score)
             .ToList();
 
-        // Best unique caption, or best if all duplicates
         var chosen = ranked.FirstOrDefault(x => !usedTexts.Contains(x.text)).text
             ?? ranked.FirstOrDefault().text
             ?? $"Check out {source.Entry.AppName}";
 
         usedTexts.Add(chosen);
         return chosen;
-    }
-
-    private List<string> BuildCandidatePool(AppSource source, SlideRole role, Random rng)
-    {
-        var entry = source.Entry;
-        var pool = new List<string>();
-
-        // 1. Role-specific structured captions (highest priority)
-        var roleSpecific = GetRoleSpecificCaptions(entry, role);
-        if (roleSpecific is { Count: > 0 })
-            pool.AddRange(roleSpecific);
-
-        // 2. Generic captions as fallback
-        if (entry.Captions is { Count: > 0 })
-            pool.AddRange(entry.Captions);
-
-        // 3. Built-in templates as last resort
-        pool.Add(BuildTemplate(entry, role, rng));
-
-        return pool;
     }
 
     private static List<string>? GetRoleSpecificCaptions(AppEntry entry, SlideRole role) =>
@@ -296,39 +310,6 @@ public sealed class ReelPlanner
     }
 
     // ── App selection helpers ─────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Picks an app from <paramref name="pool"/> that shares the fewest tags with
-    /// the already-selected apps, promoting reel-level tag diversity.
-    /// Falls back to random pick when all apps have equal tag overlap.
-    /// </summary>
-    private static AppSource PickWithTagDiversity(
-        List<AppSource> pool,
-        IReadOnlyList<AppSource> alreadySelected,
-        Random rng)
-    {
-        if (pool.Count == 0)
-            throw new InvalidOperationException("App source pool is empty — cannot pick an app.");
-
-        var selectedTags = alreadySelected
-            .SelectMany(s => s.Entry.Tags)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // Score each candidate by number of new (non-overlapping) tags it brings
-        var scored = pool
-            .Select(src =>
-            {
-                int newTags = src.Entry.Tags.Count(t =>
-                    !selectedTags.Contains(t, StringComparer.OrdinalIgnoreCase));
-                return (src, newTags);
-            })
-            .ToList();
-
-        int maxNew = scored.Max(x => x.newTags);
-        var best = scored.Where(x => x.newTags == maxNew).Select(x => x.src).ToList();
-
-        return best[rng.Next(best.Count)];
-    }
 
     private static AppSource PickUnique(List<AppSource> pool, Random rng)
     {

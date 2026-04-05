@@ -160,6 +160,76 @@ public sealed class StrategyConfig
     public bool AllowLegacyShuffleMode { get; set; } = true;
 }
 
+/// <summary>
+/// Configuration for the local Ollama LLM endpoint.
+/// </summary>
+public sealed class OllamaConfig
+{
+    /// <summary>Base URL of the local Ollama server. Default: http://localhost:11434</summary>
+    public string BaseUrl { get; set; } = "http://localhost:11434";
+
+    /// <summary>
+    /// Model to use for caption rewriting.
+    /// Default: qwen3:8b — change to any model available in your local Ollama installation.
+    /// </summary>
+    public string Model { get; set; } = "qwen3:8b";
+
+    /// <summary>HTTP request timeout in seconds. Default 30.</summary>
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>LLM temperature (0.0–1.0). Lower = more deterministic. Default 0.4.</summary>
+    public double Temperature { get; set; } = 0.4;
+}
+
+/// <summary>
+/// Configuration for the local LLM caption rewrite step.
+/// </summary>
+public sealed class LlmConfig
+{
+    /// <summary>Whether to attempt an LLM rewrite of the 4-stage draft. Default false.</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// LLM provider to use. Currently only "Ollama" is supported.
+    /// </summary>
+    public string Provider { get; set; } = "Ollama";
+
+    /// <summary>Ollama-specific settings.</summary>
+    public OllamaConfig Ollama { get; set; } = new();
+
+    /// <summary>
+    /// When true (default), falls back to a deterministic sentence join when
+    /// Ollama is unavailable or returns an error. When false, the pipeline
+    /// throws on LLM failure.
+    /// </summary>
+    public bool FallbackToDeterministicJoin { get; set; } = true;
+}
+
+/// <summary>
+/// Configuration for progressive caption reveal synchronisation.
+/// </summary>
+public sealed class CaptionSyncConfig
+{
+    /// <summary>
+    /// How captions are split across timeline phases.
+    /// "Chunked" (default) — split narration into sentence/phrase chunks,
+    /// each displayed during its proportional audio window.
+    /// </summary>
+    public string Mode { get; set; } = "Chunked";
+
+    /// <summary>
+    /// Silence added after the last narration word, in milliseconds.
+    /// The video holds on the final frame for this duration. Default 800 ms.
+    /// </summary>
+    public int TailHoldMs { get; set; } = 800;
+
+    /// <summary>
+    /// Minimum total visual duration in milliseconds.
+    /// If narration is shorter than this, the reel is padded to this length. Default 4000 ms.
+    /// </summary>
+    public int MinVisualDurationMs { get; set; } = 4000;
+}
+
 public sealed class AppConfig
 {
     public VideoConfig Video { get; set; } = new();
@@ -168,4 +238,6 @@ public sealed class AppConfig
     public ToolsConfig Tools { get; set; } = new();
     public AudioConfig Audio { get; set; } = new();
     public StrategyConfig Strategy { get; set; } = new();
+    public LlmConfig Llm { get; set; } = new();
+    public CaptionSyncConfig CaptionSync { get; set; } = new();
 }

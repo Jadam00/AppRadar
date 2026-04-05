@@ -40,6 +40,32 @@ public sealed class ReelPlannerTests
             ImagePath = $"/fake/myapp{i}.png"
         }).ToList();
 
+    /// <summary>Creates a single MyApp source with all four role-specific caption pools.</summary>
+    private static AppSource CreateRichMyAppSource(
+        string appName,
+        string[]? hookCaptions = null,
+        string[]? painCaptions = null,
+        string[]? credCaptions = null,
+        string[]? ctaCaptions = null)
+    {
+        return new AppSource
+        {
+            Entry = new AppEntry
+            {
+                AppName = appName,
+                ImageName = $"{appName.Replace(" ", "_")}.png",
+                Captions = ["Generic fallback caption"],
+                Tags = ["app", "game"],
+                HookCaptions = hookCaptions?.ToList(),
+                PainPointCaptions = painCaptions?.ToList(),
+                CredibilityCaptions = credCaptions?.ToList(),
+                CtaCaptions = ctaCaptions?.ToList()
+            },
+            SourceType = AppSourceType.MyApp,
+            ImagePath = $"/fake/{appName}.png"
+        };
+    }
+
     private static AppSource CreateRichFeaturedSource(
         string appName,
         string[] tags,
@@ -60,23 +86,6 @@ public sealed class ReelPlannerTests
                 CredibilityCaptions = credCaptions?.ToList()
             },
             SourceType = AppSourceType.Featured,
-            ImagePath = $"/fake/{appName}.png"
-        };
-    }
-
-    private static AppSource CreateRichMyAppSource(string appName, string[]? ctaCaptions = null)
-    {
-        return new AppSource
-        {
-            Entry = new AppEntry
-            {
-                AppName = appName,
-                ImageName = $"{appName.Replace(" ", "_")}.png",
-                Captions = ["Generic CTA fallback"],
-                Tags = ["app", "game"],
-                CtaCaptions = ctaCaptions?.ToList()
-            },
-            SourceType = AppSourceType.MyApp,
             ImagePath = $"/fake/{appName}.png"
         };
     }
@@ -107,8 +116,9 @@ public sealed class ReelPlannerTests
     }
 
     [Fact]
-    public void Plan_LastSlideIsAlwaysMyApp()
+    public void Plan_AllSlidesComeFromSameSingleApp()
     {
+        // In single-app mode, every slide uses the same AppSource (same app name and image).
         var planner = CreatePlanner();
         var featured = CreateFeaturedSources(5);
         var myApps = CreateMyAppSources(3);
@@ -116,21 +126,55 @@ public sealed class ReelPlannerTests
         for (int seed = 0; seed < 20; seed++)
         {
             var plan = planner.Plan(featured, myApps, new Random(seed));
-            Assert.Equal(AppSourceType.MyApp, plan.Slides[3].Source.SourceType);
+            var appNames = plan.Slides.Select(s => s.Source.Entry.AppName).Distinct().ToList();
+            Assert.Single(appNames);
         }
     }
 
     [Fact]
-    public void Plan_FirstThreeSlidesAreFeatured()
+    public void Plan_PreferredSourceIsMyApp_WhenMyAppsAvailable()
+    {
+        // The planner prefers myAppSources (the promoted app) when they exist.
+        var planner = CreatePlanner();
+        var featured = CreateFeaturedSources(5);
+        var myApps = CreateMyAppSources(3);
+
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var plan = planner.Plan(featured, myApps, new Random(seed));
+            // All slides should come from the MyApp pool
+            foreach (var slide in plan.Slides)
+                Assert.Equal(AppSourceType.MyApp, slide.Source.SourceType);
+        }
+    }
+
+    [Fact]
+    public void Plan_FallsBackToFeaturedSources_WhenMyAppsEmpty()
     {
         var planner = CreatePlanner();
-        var plan = planner.Plan(
-            CreateFeaturedSources(5), CreateMyAppSources(2), new Random(42));
+        var featured = CreateFeaturedSources(5);
+        var myApps = new List<AppSource>(); // empty
 
-        for (int i = 0; i < 3; i++)
-        {
-            Assert.Equal(AppSourceType.Featured, plan.Slides[i].Source.SourceType);
-        }
+        var plan = planner.Plan(featured, myApps, new Random(1));
+
+        // All slides should come from featured pool
+        foreach (var slide in plan.Slides)
+            Assert.Equal(AppSourceType.Featured, slide.Source.SourceType);
+    }
+
+    [Fact]
+    public void Plan_StoryDraftIsPopulated()
+    {
+        // The ReelPlan must carry a non-null StoryDraft with all 4 stage texts.
+        var planner = CreatePlanner();
+        var plan = planner.Plan(CreateFeaturedSources(3), CreateMyAppSources(2), new Random(42));
+
+        Assert.NotNull(plan.StoryDraft);
+        Assert.False(string.IsNullOrWhiteSpace(plan.StoryDraft!.AppName));
+        Assert.False(string.IsNullOrWhiteSpace(plan.StoryDraft.HookText));
+        Assert.False(string.IsNullOrWhiteSpace(plan.StoryDraft.PainPointText));
+        Assert.False(string.IsNullOrWhiteSpace(plan.StoryDraft.CredibilityText));
+        Assert.False(string.IsNullOrWhiteSpace(plan.StoryDraft.CtaText));
     }
 
     [Fact]
@@ -210,41 +254,27 @@ public sealed class ReelPlannerTests
     [Fact]
     public void Plan_PrefersRoleSpecificCaptionsOverGenericCaptions()
     {
+        // In single-app mode, one app is selected and all four role-specific caption pools
+        // come from that same app.
         var planner = CreatePlanner();
-        var hookSource = CreateRichFeaturedSource(
-            "HookApp", ["design"],
-            hookCaptions: ["HOOK: Stop everything right now!"]);
-        var painSource = CreateRichFeaturedSource(
-            "PainApp", ["productivity"],
-            painCaptions: ["PAIN: Every app wastes your time"]);
-        var credSource = CreateRichFeaturedSource(
-            "CredApp", ["tools"],
-            credCaptions: ["CRED: These three tools actually work"]);
-        var ctaSource = CreateRichMyAppSource(
-            "MyApp", ctaCaptions: ["CTA: Download it and win"]);
 
-        var featured = new List<AppSource> { hookSource, painSource, credSource };
-        var myApps = new List<AppSource> { ctaSource };
+        var richApp = CreateRichMyAppSource(
+            "MyPowApp",
+            hookCaptions:  ["HOOK: Stop everything right now!"],
+            painCaptions:  ["PAIN: Every app wastes your time"],
+            credCaptions:  ["CRED: These tools actually work"],
+            ctaCaptions:   ["CTA: Download it and win"]);
 
-        // Run multiple seeds to make sure role-specific captions are picked
-        bool hookCaptionFound = false;
-        bool painCaptionFound = false;
-        bool credCaptionFound = false;
-        bool ctaCaptionFound = false;
+        var myApps = new List<AppSource> { richApp };
+        var featured = CreateFeaturedSources(3); // unused in single-app, but required for API
 
-        for (int seed = 0; seed < 50; seed++)
-        {
-            var plan = planner.Plan(featured, myApps, new Random(seed));
-            if (plan.Slides[0].DisplayCaption == "HOOK: Stop everything right now!") hookCaptionFound = true;
-            if (plan.Slides[1].DisplayCaption == "PAIN: Every app wastes your time") painCaptionFound = true;
-            if (plan.Slides[2].DisplayCaption == "CRED: These three tools actually work") credCaptionFound = true;
-            if (plan.Slides[3].DisplayCaption == "CTA: Download it and win") ctaCaptionFound = true;
-        }
+        var plan = planner.Plan(featured, myApps, new Random(1));
 
-        Assert.True(hookCaptionFound, "Hook role-specific caption should have been selected");
-        Assert.True(painCaptionFound, "PainPoint role-specific caption should have been selected");
-        Assert.True(credCaptionFound, "Credibility role-specific caption should have been selected");
-        Assert.True(ctaCaptionFound, "CTA role-specific caption should have been selected");
+        // Each role should select from its dedicated pool
+        Assert.Equal("HOOK: Stop everything right now!", plan.Slides[0].DisplayCaption);
+        Assert.Equal("PAIN: Every app wastes your time",  plan.Slides[1].DisplayCaption);
+        Assert.Equal("CRED: These tools actually work",   plan.Slides[2].DisplayCaption);
+        Assert.Equal("CTA: Download it and win",          plan.Slides[3].DisplayCaption);
     }
 
     [Fact]
@@ -311,67 +341,23 @@ public sealed class ReelPlannerTests
     // ── Tag diversity ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Plan_PrefersAppsWithDistinctTagsForVariety()
+    public void Plan_SelectsDifferentAppsAcrossSeeds_WhenMultipleMyAppsExist()
     {
+        // With multiple myApp entries, different seeds should occasionally pick different apps.
         var planner = CreatePlanner();
+        var myApps = CreateMyAppSources(5);
+        var featured = CreateFeaturedSources(3);
 
-        // App A: unique tag "puzzle"
-        // App B: unique tag "music"
-        // App C: shares tag "design" with D
-        // App D: shares tag "design" with C (lower diversity value)
-        var sourceA = new AppSource
-        {
-            Entry = new AppEntry
-            {
-                AppName = "PuzzleApp", ImageName = "puzzle.png",
-                Captions = ["cap"], Tags = ["puzzle"]
-            },
-            SourceType = AppSourceType.Featured, ImagePath = "/fake/puzzle.png"
-        };
-        var sourceB = new AppSource
-        {
-            Entry = new AppEntry
-            {
-                AppName = "MusicApp", ImageName = "music.png",
-                Captions = ["cap"], Tags = ["music"]
-            },
-            SourceType = AppSourceType.Featured, ImagePath = "/fake/music.png"
-        };
-        var sourceC = new AppSource
-        {
-            Entry = new AppEntry
-            {
-                AppName = "DesignApp1", ImageName = "design1.png",
-                Captions = ["cap"], Tags = ["design"]
-            },
-            SourceType = AppSourceType.Featured, ImagePath = "/fake/design1.png"
-        };
-        var sourceD = new AppSource
-        {
-            Entry = new AppEntry
-            {
-                AppName = "DesignApp2", ImageName = "design2.png",
-                Captions = ["cap"], Tags = ["design"]
-            },
-            SourceType = AppSourceType.Featured, ImagePath = "/fake/design2.png"
-        };
-
-        var featured = new List<AppSource> { sourceA, sourceB, sourceC, sourceD };
-        var myApps = CreateMyAppSources(1);
-
-        // Over multiple seeds, the planner should not always pick the two design apps together
-        int timeBothDesignAppsPicked = 0;
+        var selectedNames = new HashSet<string>();
         for (int seed = 0; seed < 50; seed++)
         {
             var plan = planner.Plan(featured, myApps, new Random(seed));
-            var featuredApps = plan.Slides.Take(3).Select(s => s.Source.Entry.AppName).ToList();
-            if (featuredApps.Contains("DesignApp1") && featuredApps.Contains("DesignApp2"))
-                timeBothDesignAppsPicked++;
+            selectedNames.Add(plan.Slides[0].Source.Entry.AppName);
         }
 
-        // Both design apps picked together should be rare compared to diverse picks
-        Assert.True(timeBothDesignAppsPicked < 30,
-            "Both design apps should not dominate the reel — tag diversity should reduce co-occurrence");
+        // With 5 distinct myApp entries and 50 seeds, we should see more than 1 different app.
+        Assert.True(selectedNames.Count > 1,
+            "Multiple myApp entries should result in different apps being selected across seeds.");
     }
 
     // ── Caption scoring ───────────────────────────────────────────────────────────────────────
@@ -409,13 +395,23 @@ public sealed class ReelPlannerTests
     // ── Edge cases ────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Plan_WorksWithMinimumRequiredSources()
+    public void Plan_WorksWithOnlyOneMyApp()
     {
         var planner = CreatePlanner();
-        // Exactly 3 featured, 1 myApp
         var plan = planner.Plan(CreateFeaturedSources(3), CreateMyAppSources(1), new Random(5));
         Assert.Equal(4, plan.Slides.Count);
-        Assert.Equal(AppSourceType.MyApp, plan.Slides[3].Source.SourceType);
+        // All slides use the single myApp
+        Assert.All(plan.Slides, s => Assert.Equal(AppSourceType.MyApp, s.Source.SourceType));
+    }
+
+    [Fact]
+    public void Plan_WorksWithOnlyFeaturedSources_WhenMyAppsEmpty()
+    {
+        var planner = CreatePlanner();
+        var plan = planner.Plan(CreateFeaturedSources(5), [], new Random(5));
+        Assert.Equal(4, plan.Slides.Count);
+        // All slides use a featured app as fallback
+        Assert.All(plan.Slides, s => Assert.Equal(AppSourceType.Featured, s.Source.SourceType));
     }
 
     [Fact]

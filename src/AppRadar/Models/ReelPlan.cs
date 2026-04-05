@@ -10,6 +10,18 @@ public sealed class ReelPlan
     public TransitionStyle Transition { get; set; }
     public int SeedUsed { get; set; }
     public string StrategyMode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Pre-LLM structured 4-stage story draft for single-app reels.
+    /// Null in legacy strategy mode.
+    /// </summary>
+    public ReelStoryDraft? StoryDraft { get; set; }
+
+    /// <summary>
+    /// Post-LLM narration plan.  Populated after the LLM rewrite step.
+    /// Null until the rewrite step completes (or falls back).
+    /// </summary>
+    public ReelNarrationPlan? NarrationPlan { get; set; }
 }
 
 /// <summary>

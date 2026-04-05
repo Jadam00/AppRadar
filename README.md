@@ -1,9 +1,9 @@
 # AppRadar
 
 A .NET 10 CLI tool that generates short vertical marketing reels from local app images and metadata.
-Produces H.264 MP4 videos with a structured narrative arc, slide transitions, caption overlays,
-subtle drift animation, and optional Windows TTS narration audio —
-ready for Instagram Reels or TikTok-style uploads.
+Produces H.264 MP4 videos built around a **single app**, following a 4-stage marketing narrative
+with optional LLM-rewritten narration, Windows TTS audio, progressive caption sync, and subtle
+drift animation — ready for Instagram Reels or TikTok-style uploads.
 
 > **Windows Only** — AppRadar is designed and tested for **Windows 11 / Windows Server**.
 > Linux and macOS are not supported.
@@ -12,27 +12,24 @@ ready for Instagram Reels or TikTok-style uploads.
 
 ## What's New
 
-### Structured Narrative Engine (v2)
+### Single-App Reel Engine (v3)
 
-AppRadar no longer produces a random slideshow.  
-Each reel now follows a deliberate **4-stage marketing flow**:
+Each reel is now a **one-app mini-advert**:
 
-| Slide | Role | Purpose |
+- **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
+- **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
+- **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph.
+- **Progressive caption sync** — on-screen text reveals in chunks that match the narration audio timing.
+- **Narration-driven duration** — the reel lasts as long as the narration, not a fixed preset.
+
+| Stage | Role | Purpose |
 |---|---|---|
 | 1 | **Hook** | Stop the scroll — bold claim, tension, or curiosity |
 | 2 | **Pain Point** | Identify a problem or intriguing angle |
 | 3 | **Credibility** | Evidence, contrast, build-up toward the reveal |
 | 4 | **CTA** | Your app as the payoff with a clear call-to-action |
 
-### TTS Narration (Windows)
-
-Enable audio to generate spoken narration from slide captions and mux it into the MP4:
-
-```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
-```
-
-Narration uses the Windows SAPI `SpeechSynthesizer` (no external API, no cloud).
+All four stages are preserved as structured data in the manifest, regardless of whether LLM rewriting is enabled.
 
 ---
 
@@ -43,6 +40,7 @@ Narration uses the Windows SAPI `SpeechSynthesizer` (no external API, no cloud).
 | **Windows 11 / Windows Server** | Required platform |
 | **.NET 10 SDK** | https://dotnet.microsoft.com/download/dotnet/10.0 |
 | **FFmpeg** | Used for video encoding and audio muxing — see [FFmpeg Setup](#ffmpeg-setup) |
+| **Ollama** *(optional)* | Local LLM server for narration rewriting — see [Ollama Setup](#ollama-setup-optional) |
 
 Verify your .NET SDK version in PowerShell:
 
@@ -65,11 +63,16 @@ cd AppRadar
 # 3. Generate placeholder images for testing (no real screenshots needed)
 dotnet run --project src\AppRadar -- setup --input input
 
-# 4. Generate a structured marketing reel
+# 4. Generate a single-app reel (no audio, no LLM)
 dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 
-# 5. Generate a reel with narration audio (Windows only)
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+# 5. Generate a reel with TTS narration audio (Windows SAPI)
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+
+# 6. Generate a reel with LLM narration rewrite + audio
+#    (requires Ollama running locally with qwen3:8b or your chosen model)
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+#    and set "llm": { "enabled": true } in input\config.json
 ```
 
 ---
@@ -139,6 +142,77 @@ AppRadar searches in this order and uses the first match:
 
 ---
 
+## Ollama Setup (optional)
+
+AppRadar can optionally use a locally running [Ollama](https://ollama.com) server to rewrite the
+four raw marketing stage texts into one short, natural-sounding narration paragraph.
+
+This step is **entirely optional**. When Ollama is disabled or unavailable, AppRadar falls back
+to a deterministic sentence join (see [Fallback Behaviour](#fallback-behaviour)).
+
+### 1. Install Ollama
+
+Download and install Ollama from https://ollama.com/download (Windows installer available).
+
+### 2. Pull a model
+
+The default recommended model is `qwen3:8b`:
+
+```powershell
+ollama pull qwen3:8b
+```
+
+Any text-capable Ollama model works. To use a different model, set `llm.ollama.model` in config.
+
+### 3. Start Ollama
+
+Ollama typically runs automatically after installation. Verify it is listening:
+
+```powershell
+curl http://localhost:11434/api/tags
+```
+
+### 4. Enable LLM rewriting in AppRadar
+
+Edit `input\config.json`:
+
+```json
+{
+  "llm": {
+    "enabled": true,
+    "provider": "Ollama",
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "model": "qwen3:8b",
+      "timeoutSeconds": 30,
+      "temperature": 0.4
+    },
+    "fallbackToDeterministicJoin": true
+  }
+}
+```
+
+### Changing the model
+
+Set `llm.ollama.model` to any model you have pulled locally:
+
+```json
+"ollama": { "model": "llama3.2" }
+```
+
+### Fallback Behaviour
+
+When `llm.enabled` is `false`, Ollama is unreachable, or the request fails:
+
+1. AppRadar logs a warning.
+2. A deterministic join is used instead: `"{Hook}. {Pain}. {Credibility}. {CTA}."`
+3. Reel generation continues normally.
+4. The manifest records `"llmFallbackUsed": true`.
+
+The fallback always produces valid narration, so Ollama failure never blocks reel generation.
+
+---
+
 ## Piper TTS Setup
 
 [Piper](https://github.com/rhasspy/piper) is a fast, local neural TTS engine that runs entirely
@@ -196,7 +270,6 @@ Edit `input\config.json`:
     "enabled": true,
     "ttsProvider": "Piper",
     "leadInMs": 150,
-    "gapBetweenSlidesMs": 300,
     "normalizeAudio": true,
     "piper": {
       "exePath": "C:\\piper\\piper.exe",
@@ -222,7 +295,7 @@ Edit `input\config.json`:
 ### 4. Generate a reel with Piper narration
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
 ```
 
 ### 5. Example Piper command (manual test)
@@ -243,7 +316,7 @@ Verify your Piper installation independently before using it with AppRadar:
 | `Piper executable not found` | Wrong `exePath` | Check the path in config.json; include `piper.exe` at the end |
 | `Piper voice model not found` | Wrong `modelPath` | Verify both `.onnx` and `.onnx.json` exist in the same folder |
 | `Piper TTS failed (exit code 1)` | Model/executable mismatch | Ensure `piper.exe` version matches the downloaded model |
-| `Piper process timed out` | Very long text segment | Shorten the caption for that slide, or increase system resources |
+| `Piper process timed out` | Very long text segment | Shorten the narration, or increase system resources |
 | No audio in output MP4 | `audio.enabled` is `false` | Set `"enabled": true` in config, or pass `--with-audio true` |
 
 ---
@@ -310,11 +383,35 @@ To also generate placeholder images during setup:
     "volume": 100,
     "leadInMs": 150,
     "gapBetweenSlidesMs": 300,
-    "normalizeAudio": true
+    "normalizeAudio": true,
+    "piper": {
+      "exePath": null,
+      "modelPath": null,
+      "speaker": null,
+      "lengthScale": 1.0,
+      "noiseScale": 0.667,
+      "noiseW": 0.8
+    }
   },
   "strategy": {
     "mode": "StructuredMarketing",
     "allowLegacyShuffleMode": true
+  },
+  "llm": {
+    "enabled": false,
+    "provider": "Ollama",
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "model": "qwen3:8b",
+      "timeoutSeconds": 30,
+      "temperature": 0.4
+    },
+    "fallbackToDeterministicJoin": true
+  },
+  "captionSync": {
+    "mode": "Chunked",
+    "tailHoldMs": 800,
+    "minVisualDurationMs": 4000
   }
 }
 ```
@@ -328,21 +425,35 @@ To also generate placeholder images during setup:
 | `voiceName` | `null` | SAPI voice name (e.g. `"Microsoft Zira Desktop"`). `null` = system default. Only used by `SystemSpeech`. |
 | `rate` | `0` | Speaking rate: `-10` (slowest) to `10` (fastest). Only used by `SystemSpeech`. |
 | `volume` | `100` | Volume 0–100. Only used by `SystemSpeech`. |
-| `leadInMs` | `150` | Silence before first word of each slide (ms) |
-| `gapBetweenSlidesMs` | `300` | Silence between narrated slide segments (ms) |
+| `leadInMs` | `150` | Silence before first word of narration (ms) |
+| `gapBetweenSlidesMs` | `300` | Silence between narration segments in legacy mode (ms) |
 | `normalizeAudio` | `true` | Apply FFmpeg `loudnorm` filter to even out audio levels |
-| `piper.exePath` | `""` | Full path to `piper.exe`. Required when `ttsProvider` is `"Piper"`. |
-| `piper.modelPath` | `""` | Full path to the `.onnx` voice model. Required when `ttsProvider` is `"Piper"`. |
-| `piper.speaker` | `null` | Speaker ID for multi-speaker models. |
-| `piper.lengthScale` | `1.0` | Piper speech speed. |
-| `piper.noiseScale` | `0.667` | Piper voice variation. |
-| `piper.noiseW` | `0.8` | Piper phoneme duration variation. |
+
+### LLM (Ollama) configuration
+
+| Field | Default | Description |
+|---|---|---|
+| `llm.enabled` | `false` | Enable LLM rewrite of the 4-stage draft into one narration paragraph |
+| `llm.provider` | `"Ollama"` | LLM provider — only `"Ollama"` is currently supported |
+| `llm.ollama.baseUrl` | `"http://localhost:11434"` | Base URL of the local Ollama server |
+| `llm.ollama.model` | `"qwen3:8b"` | Model to use for narration rewriting |
+| `llm.ollama.timeoutSeconds` | `30` | HTTP request timeout in seconds |
+| `llm.ollama.temperature` | `0.4` | LLM sampling temperature (0.0–1.0, lower = more deterministic) |
+| `llm.fallbackToDeterministicJoin` | `true` | Fall back gracefully when Ollama is unavailable |
+
+### Caption sync configuration
+
+| Field | Default | Description |
+|---|---|---|
+| `captionSync.mode` | `"Chunked"` | How narration is split for progressive reveal (`"Chunked"` splits at sentence boundaries) |
+| `captionSync.tailHoldMs` | `800` | Extra hold time after the last narration word ends (ms) |
+| `captionSync.minVisualDurationMs` | `4000` | Minimum total visual duration when narration is very short (ms) |
 
 ### Strategy configuration
 
 | Field | Default | Description |
 |---|---|---|
-| `mode` | `"StructuredMarketing"` | `"StructuredMarketing"` (4-stage narrative) or `"Legacy"` (original random shuffle) |
+| `mode` | `"StructuredMarketing"` | `"StructuredMarketing"` (single-app 4-stage) or `"Legacy"` (original random shuffle) |
 | `allowLegacyShuffleMode` | `true` | When `true`, `--strategy legacy` is accepted on the CLI |
 
 ### Supported environment variables
@@ -360,17 +471,18 @@ To also generate placeholder images during setup:
 AppRadar\
 ├── src\
 │   └── AppRadar\                   # Main CLI application
-│       ├── Audio\                  # ITtsProvider, SystemSpeechTtsProvider, TtsProviderFactory
+│       ├── Audio\                  # ITtsProvider, WavDurationReader, TtsProviderFactory
 │       ├── Commands\
 │       ├── Config\
-│       ├── Models\
+│       ├── Llm\                    # ICaptionRewriteProvider, OllamaProvider, DeterministicJoiner
+│       ├── Models\                 # ReelStoryDraft, ReelNarrationPlan, DisplayChunk, …
 │       ├── Rendering\
-│       ├── Services\               # ReelPlanner, SelectionService, GenerationService, …
+│       ├── Services\               # ReelPlanner, NarrationPlanner, GenerationService, …
 │       ├── Utilities\
 │       ├── Video\
 │       └── Program.cs
 ├── tests\
-│   └── AppRadar.Tests\             # Unit tests (44 tests)
+│   └── AppRadar.Tests\             # Unit and integration tests
 ├── input\
 │   ├── config.json                 # Optional configuration overrides
 │   ├── featuredApps\
@@ -378,7 +490,7 @@ AppRadar\
 │   │   └── description.json        # App metadata with structured caption fields
 │   └── myApps\
 │       ├── images\                 # Your app screenshots
-│       └── description.json        # Your app metadata with CTA captions
+│       └── description.json        # Your app metadata with all 4-stage captions
 ├── output\
 │   ├── audio\                      # Generated narration WAV files
 │   ├── images\                     # Rendered slide PNGs
@@ -393,31 +505,38 @@ AppRadar\
 
 ## Metadata Format
 
-Both `featuredApps\description.json` and `myApps\description.json` use the same format.
+`myApps\description.json` — the app being promoted. All four role-specific caption pools should
+be populated for best results. The planner picks ONE entry (one image) and draws captions from
+all four pools for the single-app reel.
 
-### Backwards-compatible extended schema
+`featuredApps\description.json` — optional reference apps. Not used in `StructuredMarketing` mode
+(the reel is built from `myApps`), but kept for `Legacy` mode compatibility.
+
+### Recommended myApps schema
 
 ```json
 {
   "apps": [
     {
-      "imageName": "my_app.png",
+      "imageName": "my_app_screenshot.png",
       "appName": "My App Name",
       "captions": [
         "Generic fallback caption"
       ],
       "hookCaptions": [
-        "Hard hook line 1",
-        "Hard hook line 2"
+        "Hard hook line — stop the scroll",
+        "Bold opening claim"
       ],
       "painPointCaptions": [
-        "Pain point or curiosity line"
+        "The problem this app solves",
+        "Why existing solutions fall short"
       ],
       "credibilityCaptions": [
-        "Credibility or comparison line"
+        "Why this app is genuinely different",
+        "Evidence or contrast"
       ],
       "ctaCaptions": [
-        "Download now",
+        "Download My App and see for yourself",
         "Try it today"
       ],
       "tags": ["productivity", "utility"],
@@ -437,7 +556,6 @@ When a role-specific list is absent or empty, the planner falls back to the gene
 - The image file referenced by `imageName` must exist in the `images\` subfolder
 - `captions` must not be empty (at least one generic caption is required as fallback)
 - Role-specific caption fields (`hookCaptions`, `painPointCaptions`, etc.) are optional
-- At least **3 enabled** featured apps are required
 - At least **1 enabled** myApp is required
 
 ---
@@ -460,7 +578,7 @@ If you don't have real app screenshots yet, generate colorful placeholder images
 dotnet run --project src\AppRadar -- setup --input input
 ```
 
-### 3. Generate a structured marketing reel
+### 3. Generate a single-app marketing reel
 
 ```powershell
 dotnet run --project src\AppRadar -- generate --count 1 --duration 16
@@ -469,7 +587,7 @@ dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 ### 4. Generate a reel with narration audio (Windows)
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
 ```
 
 Output files are written to `output\videos\`, `output\images\`, `output\audio\`, and `output\manifests\`.
@@ -487,7 +605,7 @@ appradar generate [options]
 
 Options:
   --count <number>         Number of reels to generate (default: 1)
-  --duration <seconds>     Target duration per reel in seconds (default: 24)
+  --duration <seconds>     Minimum reel duration in seconds; overridden by narration length (default: 24)
   --seed <number>          Seed for deterministic output (optional)
   --fps <number>           Frames per second, overrides config (optional)
   --input <path>           Input directory path (default: input)
@@ -509,11 +627,15 @@ appradar setup [--input <path>]
 ## Example Commands (PowerShell)
 
 ```powershell
-# Generate 1 structured reel, 16 seconds
+# Generate 1 single-app reel, no audio
 dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 
-# Generate a reel with TTS narration audio
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+# Generate a reel with Windows SAPI narration audio
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+
+# Generate a reel with Ollama LLM rewrite + Piper audio
+# (requires llm.enabled=true and audio.ttsProvider=Piper in config)
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
 
 # Use the original legacy shuffle mode
 dotnet run --project src\AppRadar -- generate --count 1 --duration 24 --strategy legacy
@@ -521,7 +643,7 @@ dotnet run --project src\AppRadar -- generate --count 1 --duration 24 --strategy
 # Deterministic output with seed
 dotnet run --project src\AppRadar -- generate --count 2 --duration 16 --seed 123
 
-# Generate 5 reels
+# Generate 5 reels (each uses a different image of the same app)
 dotnet run --project src\AppRadar -- generate --count 5 --duration 16
 
 # Custom input/output directories
@@ -539,29 +661,40 @@ dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 
 ## How the Narrative Engine Works
 
-### Structured Marketing mode (default)
+### StructuredMarketing mode (default)
 
-The `ReelPlanner` service builds each reel in four intentional stages:
+Each reel promotes **one app** using a deliberate 4-stage narrative:
 
-**1. HOOK** — Pick a featured app whose hook captions feel punchy and short.  
-**2. PAIN POINT** — Pick a different featured app (preferring distinct tags) whose pain-point copy creates tension.  
-**3. CREDIBILITY** — Pick a third featured app that builds toward the payoff.  
-**4. CTA** — Place your app as the final slide with a clear call to action.
+1. **SELECT** — Pick exactly 1 app entry from `myApps` (one image). Multiple entries for the same app with different screenshots are all eligible; one is selected per reel.
+2. **DRAFT** — Build a `ReelStoryDraft` with 4 stage texts from that app's caption pools (hook → pain → cred → CTA). Stage texts come from role-specific caption lists first, then generic captions, then built-in templates.
+3. **REWRITE** *(optional, requires Ollama)* — A local LLM rewrites the 4 stage texts into one short spoken paragraph.
+4. **SPLIT** — The narration paragraph is split into display chunks at sentence/phrase boundaries.
+5. **RENDER** — 4 slide images are generated from the **same base image**, each showing one caption chunk.
+6. **TTS** *(optional)* — The full narration paragraph is synthesised to a WAV file.
+7. **MEASURE** — The actual WAV duration is read from the file header.
+8. **TIMELINE** — Chunk display timings are derived from the real audio duration (proportional to word count).
+9. **COMPOSE** — FFmpeg composes the final MP4. Duration = audio duration + tail hold (not a fixed preset).
 
-Caption selection uses a heuristic scorer that:
-- Prefers short captions (≤ 50 chars ideal)
-- Rewards captions with exclamation points or questions
-- Penalises very long captions (> 90 chars)
-- Avoids duplicate wording across slides
-- Prefers apps with distinct tags across the reel
+### How narration length drives reel duration
+
+- The reel stays on screen for as long as the narration lasts.
+- After TTS generation, the actual WAV duration is measured (no estimates).
+- Final video duration = max(audio duration + `captionSync.tailHoldMs`, `captionSync.minVisualDurationMs`).
+- `--duration` sets a fallback minimum, not a hard cap.
+
+### Progressive caption sync
+
+- The narration paragraph is split at sentence/punctuation boundaries into display chunks.
+- Each chunk is displayed for a time window proportional to its word count relative to total words.
+- No chunk extends beyond (audio duration + tail hold).
+- The on-screen text and the narration audio come from **exactly the same text source**.
 
 ### Legacy mode
 
 Passing `--strategy legacy` restores the original behaviour:
-- 3 random featured apps selected
-- 1 random myApp selected
+- 3 random featured apps selected for the first 3 slides
+- 1 random myApp selected for the CTA slide
 - Order shuffled randomly
-- Transition style chosen at random
 
 ### Determinism
 
@@ -574,22 +707,16 @@ When `--seed` is provided:
 
 ## How TTS Narration Works
 
-When audio is enabled, the pipeline adds two steps after slide rendering:
+When audio is enabled in `StructuredMarketing` mode:
 
-1. **Narration generation** — The selected TTS provider synthesises each slide's narration
-   text into a per-segment WAV file.  FFmpeg then concatenates the segments — inserting
-   configurable silence gaps — and optionally normalises the audio with `loudnorm`.
+1. **Single-paragraph TTS** — The final narration paragraph (LLM-rewritten or deterministic fallback) is passed to the TTS provider as a single segment.
+2. **Duration measurement** — The actual WAV duration is read from the output file header.
+3. **Video duration** — The video is rendered to match the measured audio duration plus `captionSync.tailHoldMs`.
+4. **Mux** — The video and audio are combined into the final MP4.
 
-   Two providers are available:
-   - **SystemSpeech** (default) — uses the built-in Windows SAPI `SpeechSynthesizer`
-     (`System.Speech`).  No setup required on Windows.
-   - **Piper** — uses the [Piper](https://github.com/rhasspy/piper) neural TTS engine
-     (external executable).  Produces higher-quality, more natural-sounding speech.
-     Requires a separate download — see [Piper TTS Setup](#piper-tts-setup).
-
-2. **Video + audio muxing** — The video is rendered as a silent MP4 first, then FFmpeg
-   muxes it with the narration WAV (`-c:a aac -b:a 128k -shortest`) to produce the
-   final file.
+Two TTS providers are available:
+- **SystemSpeech** (default) — uses the built-in Windows SAPI `SpeechSynthesizer` (`System.Speech`). No setup required on Windows.
+- **Piper** — uses the [Piper](https://github.com/rhasspy/piper) neural TTS engine (external executable). Produces higher-quality, more natural-sounding speech. Requires a separate download — see [Piper TTS Setup](#piper-tts-setup).
 
 **Selecting a provider:**
 ```json
@@ -598,166 +725,47 @@ When audio is enabled, the pipeline adds two steps after slide rendering:
 
 **SystemSpeech voice selection:**  
 Set `audio.voiceName` to use a specific SAPI voice:
+
 ```json
 "audio": { "voiceName": "Microsoft Zira Desktop" }
 ```
-Leave it `null` to use the Windows system default voice.
+
+Run `dotnet run -- setup --list-voices` to list available Windows SAPI voices.
 
 ---
 
-## Output Structure
+## Manifest Format
 
-Each generation produces:
+Each generated reel produces a JSON manifest in `output\manifests\`. Key fields:
 
-| File | Location | Description |
-|---|---|---|
-| Slide PNGs | `output\images\` | Rendered slide images with caption overlays |
-| MP4 video | `output\videos\` | Final H.264 vertical reel (with or without audio) |
-| Narration WAV | `output\audio\` | Raw TTS audio (only when `--with-audio true`) |
-| Manifest JSON | `output\manifests\` | Full metadata about what was generated |
-
-File names include a timestamp and short random ID, e.g.:
-```
-reel_20260404_120000_a1b2c3d4.mp4
-reel_20260404_120000_a1b2c3d4_narration.wav
-reel_20260404_120000_a1b2c3d4_slide01.png
-reel_20260404_120000_a1b2c3d4_manifest.json
-```
-
-### Manifest structure
-
-```json
-{
-  "GenerationId": "reel_20260404_120000_a1b2c3d4",
-  "CreatedUtc": "2026-04-04T12:00:00Z",
-  "SeedUsed": 42,
-  "DurationSeconds": 16,
-  "Width": 1080,
-  "Height": 1920,
-  "Fps": 30,
-  "TransitionStyle": "Crossfade",
-  "Strategy": "StructuredMarketing",
-  "HasAudio": true,
-  "VideoPath": "output\\videos\\reel_20260404_120000_a1b2c3d4.mp4",
-  "SlidePaths": ["..."],
-  "Slides": [
-    {
-      "Slot": 1,
-      "Role": "Hook",
-      "SourceType": "Featured",
-      "AppName": "Canva",
-      "ImageName": "canva.jpg",
-      "SelectedCaption": "Stop settling for boring visuals",
-      "NarrationText": "Stop settling for boring visuals",
-      "SourcePath": "input\\featuredApps\\images\\canva.jpg",
-      "RenderedSlidePath": "output\\images\\reel_..._slide01.png"
-    }
-  ]
-}
-```
-
----
-
-## Video Encoding
-
-- **Container:** MP4 (H.264, `libx264`)
-- **Pixel format:** `yuv420p` (maximum compatibility)
-- **CRF:** 23 (good quality / file size balance)
-- **Preset:** `fast`
-- **Resolution:** 1080×1920 (vertical, matches Instagram Reels / TikTok)
-- **Frame rate:** 30 fps (configurable)
-- **Audio:** AAC 128 kbps (when enabled); silent by default
-
----
-
-## Running Tests
-
-```powershell
-dotnet test tests\AppRadar.Tests
-```
-
-The test suite covers:
-- `ReelPlannerTests` — narrative engine, scoring heuristics, tag diversity, determinism
-- `SelectionServiceTests` — legacy selection logic
-- `VideoComposerTests` — FFmpeg discovery and cycle calculation
-- `MetadataValidatorTests` — validation rules
-- `ManifestWriterTests` — manifest serialisation
+| Field | Description |
+|---|---|
+| `generationId` | Unique ID for this reel |
+| `seedUsed` | RNG seed used |
+| `selectedAppName` | The single app promoted in this reel |
+| `selectedImageName` | The single image used throughout the reel |
+| `hookText` | Stage 1 raw text (pre-LLM) |
+| `painPointText` | Stage 2 raw text (pre-LLM) |
+| `credibilityText` | Stage 3 raw text (pre-LLM) |
+| `ctaText` | Stage 4 raw text (pre-LLM) |
+| `narrationText` | Final narration paragraph (LLM-rewritten or deterministic fallback) |
+| `llmModelUsed` | Ollama model used, or `null` if fallback was used |
+| `ttsProvider` | TTS provider used for audio generation |
+| `audioDurationMs` | Measured audio duration in ms |
+| `finalVideoDurationMs` | Final video duration in ms |
+| `llmFallbackUsed` | `true` if Ollama was unavailable and deterministic join was used |
+| `revealTimeline` | Array of `{ text, startMs, durationMs }` for progressive caption sync |
 
 ---
 
 ## Troubleshooting
 
-### `FFmpeg not found`
-
-AppRadar prints a detailed message listing every location that was searched and three options to fix it.
-The most common fix is to install FFmpeg via winget:
-
-```powershell
-winget install Gyan.FFmpeg
-```
-
-Then restart your terminal. Or set the path explicitly in `input\config.json`:
-
-```json
-"tools": { "ffmpegPath": "C:\\ffmpeg\\bin\\ffmpeg.exe" }
-```
-
-### `TTS not available on this platform`
-
-`SystemSpeechTtsProvider` requires Windows.  If you see this warning on a non-Windows machine,
-audio is automatically skipped and a silent video is produced.  On Windows this should not occur
-under normal circumstances.
-
-### `At least 3 enabled featured apps are required`
-
-Add more entries to `input\featuredApps\description.json` with `"enabled": true`.
-
-### `Image file not found`
-
-Ensure image files listed in `description.json` exist in the corresponding `images\` subfolder.
-Run `dotnet run --project src\AppRadar -- setup --input input` to generate placeholder images.
-
-### `Could not find a usable font`
-
-On Windows, `Arial` is a built-in system font and should always be found.
-If you see this error, verify the font family name in `input\config.json`:
-
-```json
-"overlay": { "fontFamily": "Arial" }
-```
-
-### `FFmpeg failed with exit code N`
-
-Run with debug-level logging:
-
-```powershell
-$env:DOTNET_LOGGING__CONSOLE__LOGLEVEL__DEFAULT = "Debug"
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16
-```
-
-The full FFmpeg command and stderr output will be included in the logs.
-
-Common causes:
-- `libx264` encoder not included in your FFmpeg build — use a full build from https://ffmpeg.org/download.html#build-windows
-- Output path contains unsupported characters
-- Insufficient disk space
-
-### Paths with spaces
-
-AppRadar quotes all file paths passed to FFmpeg. Paths with spaces are supported.
-If you experience issues, try moving the repository to a path without spaces (e.g. `C:\AppRadar`).
-
-### Slides look distorted
-
-All input images are scaled using "cover fit" with centered crop — they are never stretched.
-If output looks unexpected, verify source images are valid PNGs or JPEGs.
-
-### Running from a different working directory
-
-AppRadar resolves `--input` and `--output` to absolute paths and logs them at startup.
-If relative paths resolve to unexpected locations, use absolute paths:
-
-```powershell
-dotnet run --project src\AppRadar -- generate --input C:\AppRadar\input --output C:\AppRadar\output
-```
+| Problem | Likely cause | Fix |
+|---|---|---|
+| `No app sources available` | `myApps\description.json` is empty or all entries disabled | Enable at least one myApp entry |
+| `At least 1 enabled myApp is required` | All myApp entries have `"enabled": false` or no valid images | Add or enable a myApp entry with a valid image |
+| No audio in output MP4 | `audio.enabled` is `false` | Set `"enabled": true` or pass `--with-audio true` |
+| LLM rewrite skipped | `llm.enabled` is `false` (default) | Set `"llm": { "enabled": true }` and ensure Ollama is running |
+| Ollama fallback used | Ollama not running or model not pulled | Start Ollama and run `ollama pull qwen3:8b` |
+| Very short reel duration | Narration is short, minVisualDurationMs applies | Increase `captionSync.minVisualDurationMs` or add more content to captions |
 
