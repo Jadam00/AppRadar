@@ -222,6 +222,13 @@ public sealed class VideoComposer
         return sb.ToString();
     }
 
+    // Minimum xfade offset in seconds — prevents an offset of 0 which FFmpeg rejects.
+    private const double MinXfadeOffsetSeconds = 0.001;
+
+    // A chunk must be displayed for at least half the xfade transition duration, otherwise
+    // the transition would start before the chunk is even fully visible.
+    private const double MinChunkDisplayFraction = 0.5;
+
     public string ComposeVideo(
         List<string> slidePaths,
         string outputVideosDir,
@@ -255,19 +262,20 @@ public sealed class VideoComposer
             // Input durations are inflated by the xfade transition length (except the last)
             // so that total output exactly matches the sum of chunk display durations.
             double transitionSec = transitionMs / 1000.0;
-            inputArgs = new List<string>(slidePaths.Count);
+            double minDisplaySec = transitionSec * MinChunkDisplayFraction;
 
+            // Compute clamped display durations once; reuse for both input args and filter graph.
+            var displayDurSec = chunkDurationsMs
+                .Select(ms => Math.Max(ms / 1000.0, minDisplaySec))
+                .ToList();
+
+            inputArgs = new List<string>(slidePaths.Count);
             for (int i = 0; i < slidePaths.Count; i++)
             {
-                double displaySec = Math.Max(chunkDurationsMs[i] / 1000.0, transitionSec / 2.0);
                 bool isLast = i == slidePaths.Count - 1;
-                double inputSec = isLast ? displaySec : displaySec + transitionSec;
+                double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
                 inputArgs.Add($"-loop 1 -t {inputSec:F3} -i \"{slidePaths[i]}\"");
             }
-
-            var displayDurSec = chunkDurationsMs
-                .Select((ms, i) => Math.Max(ms / 1000.0, transitionMs / 1000.0 / 2.0))
-                .ToList();
 
             filterScript = BuildFilterGraphChunked(
                 slidePaths.Count, fps, durationSeconds,
@@ -431,7 +439,7 @@ public sealed class VideoComposer
         for (int i = 1; i < totalSlides; i++)
         {
             double offset = i * (segDuration - transitionDuration);
-            if (offset < 0.001) offset = 0.001;
+            if (offset < MinXfadeOffsetSeconds) offset = MinXfadeOffsetSeconds;
 
             bool isLast = (i == totalSlides - 1);
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";
@@ -500,7 +508,7 @@ public sealed class VideoComposer
         {
             cumulative += displayDurSec[i - 1];
             double offset = cumulative - (i - 1) * transitionSec;
-            if (offset < 0.001) offset = 0.001;
+            if (offset < MinXfadeOffsetSeconds) offset = MinXfadeOffsetSeconds;
 
             bool isLast = i == totalSlides - 1;
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";

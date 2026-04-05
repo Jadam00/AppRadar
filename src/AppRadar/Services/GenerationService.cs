@@ -302,9 +302,8 @@ public sealed class GenerationService
         {
             narrationPlan.ExpectedAudioDurationMs = structuredAudioDurationMs;
 
-            int effectiveAudioMs = structuredAudioDurationMs > 0
-                ? structuredAudioDurationMs
-                : Math.Max(0, finalStructuredDurationMs - config.CaptionSync.TailHoldMs);
+            int effectiveAudioMs = ResolveEffectiveAudioMs(
+                structuredAudioDurationMs, finalStructuredDurationMs, config.CaptionSync.TailHoldMs);
 
             revealChunks = NarrationPlanner.BuildRevealTimeline(
                 NarrationPlanner.SplitIntoChunks(narrationPlan.FullNarrationText),
@@ -448,6 +447,16 @@ public sealed class GenerationService
             return (fallbackText, false, null, true);
         }
     }
+
+    /// <summary>
+    /// Resolves the effective audio duration to use for proportional chunk allocation.
+    /// Uses the real measured audio length when available; falls back to the visual
+    /// duration minus the tail hold so chunks fill the screen time proportionally.
+    /// </summary>
+    private static int ResolveEffectiveAudioMs(int audioDurationMs, int finalDurationMs, int tailHoldMs) =>
+        audioDurationMs > 0
+            ? audioDurationMs
+            : Math.Max(0, finalDurationMs - tailHoldMs);
 
     /// <summary>
     /// Generates TTS narration from a single full narration paragraph.
