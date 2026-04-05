@@ -31,7 +31,15 @@
     "volume": 100,
     "leadInMs": 150,
     "gapBetweenSlidesMs": 300,
-    "normalizeAudio": true
+    "normalizeAudio": true,
+    "piper": {
+      "exePath": null,
+      "modelPath": null,
+      "speaker": null,
+      "lengthScale": 1.0,
+      "noiseScale": 0.667,
+      "noiseW": 0.8
+    }
   },
   "strategy": {
     "mode": "StructuredMarketing",

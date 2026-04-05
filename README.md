@@ -139,6 +139,115 @@ AppRadar searches in this order and uses the first match:
 
 ---
 
+## Piper TTS Setup
+
+[Piper](https://github.com/rhasspy/piper) is a fast, local neural TTS engine that runs entirely
+on your machine — no cloud API, no internet required.  AppRadar can use it instead of the
+built-in Windows SAPI synthesizer.
+
+### 1. Download Piper
+
+Download the latest Windows release from:
+
+> https://github.com/rhasspy/piper/releases
+
+Extract the archive to a permanent location, for example `C:\piper`.  
+You should have at minimum:
+
+```
+C:\piper\
+  piper.exe
+  espeak-ng-data\   (required by Piper)
+```
+
+### 2. Download a voice model
+
+Browse available voice models at:
+
+> https://huggingface.co/rhasspy/piper-voices
+
+Each voice requires **two files**:
+- `<voice>.onnx` — the model weights
+- `<voice>.onnx.json` — the model config (must be in the same folder)
+
+Example — download the `en_GB-alan-medium` voice:
+
+```powershell
+New-Item -ItemType Directory -Path C:\piper\models -Force
+
+# Model weights
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx" `
+  -OutFile "C:\piper\models\en_GB-alan-medium.onnx"
+
+# Model config (must sit next to the .onnx file)
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json" `
+  -OutFile "C:\piper\models\en_GB-alan-medium.onnx.json"
+```
+
+### 3. Configure AppRadar
+
+Edit `input\config.json`:
+
+```json
+{
+  "audio": {
+    "enabled": true,
+    "ttsProvider": "Piper",
+    "leadInMs": 150,
+    "gapBetweenSlidesMs": 300,
+    "normalizeAudio": true,
+    "piper": {
+      "exePath": "C:\\piper\\piper.exe",
+      "modelPath": "C:\\piper\\models\\en_GB-alan-medium.onnx",
+      "speaker": null,
+      "lengthScale": 1.0,
+      "noiseScale": 0.667,
+      "noiseW": 0.8
+    }
+  }
+}
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `exePath` | *(required)* | Full path to `piper.exe` |
+| `modelPath` | *(required)* | Full path to the `.onnx` voice model |
+| `speaker` | `null` | Speaker ID for multi-speaker models; `null` for single-speaker voices |
+| `lengthScale` | `1.0` | Speech speed — values below `1.0` speed up, above `1.0` slow down |
+| `noiseScale` | `0.667` | Voice variation / expressiveness |
+| `noiseW` | `0.8` | Phoneme duration variation |
+
+### 4. Generate a reel with Piper narration
+
+```powershell
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+```
+
+### 5. Example Piper command (manual test)
+
+Verify your Piper installation independently before using it with AppRadar:
+
+```powershell
+& "C:\piper\piper.exe" `
+  --model "C:\piper\models\en_GB-alan-medium.onnx" `
+  --output_file "C:\temp\test.wav" `
+  --text "Hello world, this is a test"
+```
+
+### Troubleshooting Piper
+
+| Error | Likely cause | Fix |
+|---|---|---|
+| `Piper executable not found` | Wrong `exePath` | Check the path in config.json; include `piper.exe` at the end |
+| `Piper voice model not found` | Wrong `modelPath` | Verify both `.onnx` and `.onnx.json` exist in the same folder |
+| `Piper TTS failed (exit code 1)` | Model/executable mismatch | Ensure `piper.exe` version matches the downloaded model |
+| `Piper process timed out` | Very long text segment | Shorten the caption for that slide, or increase system resources |
+| No audio in output MP4 | `audio.enabled` is `false` | Set `"enabled": true` in config, or pass `--with-audio true` |
+
+---
+
 ## Setup Script
 
 Run `Setup.ps1` from the repository root to validate your environment:
@@ -215,13 +324,19 @@ To also generate placeholder images during setup:
 | Field | Default | Description |
 |---|---|---|
 | `enabled` | `false` | Generate and mux narration audio into the MP4 |
-| `ttsProvider` | `"SystemSpeech"` | TTS backend to use. Currently: `SystemSpeech` (Windows SAPI) |
-| `voiceName` | `null` | SAPI voice name (e.g. `"Microsoft Zira Desktop"`). `null` = system default |
-| `rate` | `0` | Speaking rate: `-10` (slowest) to `10` (fastest) |
-| `volume` | `100` | Volume 0–100 |
+| `ttsProvider` | `"SystemSpeech"` | TTS backend: `"SystemSpeech"` (Windows SAPI) or `"Piper"` (Piper neural TTS) |
+| `voiceName` | `null` | SAPI voice name (e.g. `"Microsoft Zira Desktop"`). `null` = system default. Only used by `SystemSpeech`. |
+| `rate` | `0` | Speaking rate: `-10` (slowest) to `10` (fastest). Only used by `SystemSpeech`. |
+| `volume` | `100` | Volume 0–100. Only used by `SystemSpeech`. |
 | `leadInMs` | `150` | Silence before first word of each slide (ms) |
 | `gapBetweenSlidesMs` | `300` | Silence between narrated slide segments (ms) |
 | `normalizeAudio` | `true` | Apply FFmpeg `loudnorm` filter to even out audio levels |
+| `piper.exePath` | `""` | Full path to `piper.exe`. Required when `ttsProvider` is `"Piper"`. |
+| `piper.modelPath` | `""` | Full path to the `.onnx` voice model. Required when `ttsProvider` is `"Piper"`. |
+| `piper.speaker` | `null` | Speaker ID for multi-speaker models. |
+| `piper.lengthScale` | `1.0` | Piper speech speed. |
+| `piper.noiseScale` | `0.667` | Piper voice variation. |
+| `piper.noiseW` | `0.8` | Piper phoneme duration variation. |
 
 ### Strategy configuration
 
@@ -461,26 +576,32 @@ When `--seed` is provided:
 
 When audio is enabled, the pipeline adds two steps after slide rendering:
 
-1. **Narration generation** — The `SystemSpeechTtsProvider` uses the Windows SAPI
-   `SpeechSynthesizer` (from `System.Speech`) to synthesise each slide's narration text
-   into a per-segment WAV file.  FFmpeg then concatenates the segments — inserting
+1. **Narration generation** — The selected TTS provider synthesises each slide's narration
+   text into a per-segment WAV file.  FFmpeg then concatenates the segments — inserting
    configurable silence gaps — and optionally normalises the audio with `loudnorm`.
+
+   Two providers are available:
+   - **SystemSpeech** (default) — uses the built-in Windows SAPI `SpeechSynthesizer`
+     (`System.Speech`).  No setup required on Windows.
+   - **Piper** — uses the [Piper](https://github.com/rhasspy/piper) neural TTS engine
+     (external executable).  Produces higher-quality, more natural-sounding speech.
+     Requires a separate download — see [Piper TTS Setup](#piper-tts-setup).
 
 2. **Video + audio muxing** — The video is rendered as a silent MP4 first, then FFmpeg
    muxes it with the narration WAV (`-c:a aac -b:a 128k -shortest`) to produce the
    final file.
 
-**TTS voice selection:**  
-Set `audio.voiceName` in config to use a specific SAPI voice, e.g.:
+**Selecting a provider:**
+```json
+"audio": { "ttsProvider": "Piper" }
+```
+
+**SystemSpeech voice selection:**  
+Set `audio.voiceName` to use a specific SAPI voice:
 ```json
 "audio": { "voiceName": "Microsoft Zira Desktop" }
 ```
 Leave it `null` to use the Windows system default voice.
-
-**Why System.Speech?**  
-`System.Speech.Synthesis.SpeechSynthesizer` is a built-in Windows API — no cloud service,
-no API keys, no internet required.  It runs entirely locally and produces standard WAV output
-that FFmpeg can mux directly.
 
 ---
 

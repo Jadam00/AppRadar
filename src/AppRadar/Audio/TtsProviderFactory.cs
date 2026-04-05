@@ -12,6 +12,7 @@ public static class TtsProviderFactory
     /// Returns an <see cref="ITtsProvider"/> appropriate for the configured provider name.
     /// Throws <see cref="InvalidOperationException"/> when the requested provider is not
     /// available in the current environment.
+    /// Supported provider names: <c>"SystemSpeech"</c>, <c>"Piper"</c>.
     /// </summary>
     public static ITtsProvider Create(AudioConfig config, ILoggerFactory loggerFactory)
     {
@@ -31,7 +32,14 @@ public static class TtsProviderFactory
                 loggerFactory.CreateLogger<SystemSpeechTtsProvider>());
         }
 
+        if (name.Equals("Piper", StringComparison.OrdinalIgnoreCase))
+        {
+            return new PiperTtsProvider(
+                config.Piper,
+                loggerFactory.CreateLogger<PiperTtsProvider>());
+        }
+
         throw new NotSupportedException(
-            $"Unknown TTS provider: '{name}'. Supported values: SystemSpeech");
+            $"Unknown TTS provider: '{name}'. Supported values: SystemSpeech, Piper");
     }
 }
