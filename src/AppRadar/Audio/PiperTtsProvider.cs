@@ -29,7 +29,8 @@ public sealed class PiperTtsProvider : ITtsProvider
     private readonly ILogger<PiperTtsProvider> _logger;
 
     // Injected for unit testing so no real process needs to be spawned.
-    private readonly Func<string, string, int, (int ExitCode, string Stderr)> _processRunner;
+    // Parameters: exe, args, stdinText, timeoutSeconds → (exitCode, stderr)
+    private readonly Func<string, string, string, int, (int ExitCode, string Stderr)> _processRunner;
 
     /// <summary>
     /// Creates a <see cref="PiperTtsProvider"/> that runs Piper as a real subprocess.
@@ -46,7 +47,7 @@ public sealed class PiperTtsProvider : ITtsProvider
     internal PiperTtsProvider(
         PiperConfig config,
         ILogger<PiperTtsProvider> logger,
-        Func<string, string, int, (int ExitCode, string Stderr)> processRunner)
+        Func<string, string, string, int, (int ExitCode, string Stderr)> processRunner)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -148,14 +149,15 @@ public sealed class PiperTtsProvider : ITtsProvider
             var segment = segments[i];
             var segPath = Path.Combine(tempDir, $"seg_{i:D2}.wav");
             var safeText = SanitiseText(segment.Text);
-            var args = BuildArguments(safeText, segPath);
+            ValidateText(safeText);
+            var args = BuildArguments(segPath);
 
             _logger.LogDebug(
                 "Piper synthesising segment {Index}: \"{Text}\"", i, segment.Text);
             _logger.LogDebug(
-                "Piper command: \"{Exe}\" {Args}", _config.ExePath, args);
+                "Piper command: \"{Exe}\" {Args} (text via stdin)", _config.ExePath, args);
 
-            var (exitCode, stderr) = _processRunner(_config.ExePath, args, DefaultTimeoutSeconds);
+            var (exitCode, stderr) = _processRunner(_config.ExePath, args, safeText, DefaultTimeoutSeconds);
 
             if (exitCode != 0)
                 throw new InvalidOperationException(
@@ -171,44 +173,48 @@ public sealed class PiperTtsProvider : ITtsProvider
     }
 
     /// <summary>
-    /// Builds the <c>piper.exe</c> argument string for a single segment.
+    /// Validates that <paramref name="sanitisedText"/> does not exceed the maximum allowed length.
     /// </summary>
-    internal string BuildArguments(string sanitisedText, string outputPath)
+    /// <exception cref="ArgumentException">Thrown when the text is too long.</exception>
+    internal static void ValidateText(string sanitisedText)
     {
         if (sanitisedText.Length > MaxTextLengthChars)
             throw new ArgumentException(
                 $"Narration segment exceeds the maximum allowed length of {MaxTextLengthChars} " +
                 $"characters ({sanitisedText.Length} chars). Shorten the caption for this slide.",
                 nameof(sanitisedText));
+    }
 
+    /// <summary>
+    /// Builds the <c>piper.exe</c> argument string for a single segment.
+    /// Narration text is not included here; it is sent to Piper via stdin.
+    /// </summary>
+    internal string BuildArguments(string outputPath)
+    {
         var sb = new StringBuilder();
         sb.Append($"--model \"{_config.ModelPath}\" ");
         sb.Append($"--output_file \"{outputPath}\" ");
         sb.Append($"--length_scale {_config.LengthScale:F3} ");
         sb.Append($"--noise_scale {_config.NoiseScale:F3} ");
-        sb.Append($"--noise_w {_config.NoiseW:F3} ");
+        sb.Append($"--noise_w {_config.NoiseW:F3}");
 
         if (_config.Speaker.HasValue)
-            sb.Append($"--speaker {_config.Speaker.Value} ");
-
-        sb.Append($"--text \"{sanitisedText}\"");
+            sb.Append($" --speaker {_config.Speaker.Value}");
 
         return sb.ToString();
     }
 
     /// <summary>
-    /// Sanitises narration text for safe use as a CLI <c>--text</c> argument.
+    /// Sanitises narration text before it is written to Piper's stdin.
+    /// Line endings and tabs are collapsed to spaces so Piper receives a single clean line.
     /// </summary>
     internal static string SanitiseText(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return string.Empty;
 
-        // Normalise line endings and tabs to spaces
+        // Normalise line endings and tabs to spaces — Piper expects a single line via stdin
         text = text.Replace('\n', ' ').Replace('\r', ' ').Replace('\t', ' ');
-
-        // Remove double quotes — they would break the CLI argument delimiter
-        text = text.Replace("\"", string.Empty);
 
         // Collapse multiple spaces and trim
         return string.Join(" ", text.Split(' ', StringSplitOptions.RemoveEmptyEntries));
@@ -299,21 +305,29 @@ public sealed class PiperTtsProvider : ITtsProvider
     // ── Process execution ─────────────────────────────────────────────────────────────────────
 
     private static (int ExitCode, string Stderr) RunProcess(
-        string exe, string args, int timeoutSeconds)
+        string exe, string args, string text, int timeoutSeconds)
     {
         var psi = new ProcessStartInfo
         {
             FileName = exe,
             Arguments = args,
             UseShellExecute = false,
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardInputEncoding = Encoding.UTF8,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
 
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException(
                 $"Failed to start Piper process. Executable: {exe}");
+
+        // Send narration text via stdin; closing signals end of input to Piper
+        process.StandardInput.Write(text);
+        process.StandardInput.Close();
 
         var stderr = process.StandardError.ReadToEnd();
         var completed = process.WaitForExit(TimeSpan.FromSeconds(timeoutSeconds));
