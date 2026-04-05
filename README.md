@@ -12,9 +12,19 @@ drift animation — ready for Instagram Reels or TikTok-style uploads.
 
 ## What's New
 
+### Reel Renderer Refinements (v4)
+
+The StructuredMarketing pipeline now produces cleaner, better-synced reels:
+
+- **Horizontal scroll transitions** — slides move leftward (`slideleft` xfade) between every caption chunk.
+- **Captions sourced from final narration** — on-screen text is always derived from the exact narration paragraph used for speech (LLM-rewritten or deterministic fallback). Raw stage texts are never shown once narration exists.
+- **Shadow-free overlay defaults** — gradient overlay (`BottomGradientOpacity`) and text shadow (`TextShadow`) both default to **off**. Re-enable in `input/config.json` if your images need contrast boosting.
+- **Narration-length-driven timing** — each visual slide lasts exactly as long as its audio chunk (proportional to word count × measured WAV duration). No fixed per-slide timer in structured mode.
+- **One slide per narration chunk** — the renderer generates one PNG per caption chunk, not one per role, so every chunk gets its own dedicated visual state during composition.
+
 ### Single-App Reel Engine (v3)
 
-Each reel is now a **one-app mini-advert**:
+Each reel is a **one-app mini-advert**:
 
 - **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
 - **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
@@ -364,8 +374,8 @@ To also generate placeholder images during setup:
     "fontColor": "#FFFFFF",
     "padding": 64,
     "maxTextWidthPercent": 0.82,
-    "bottomGradientOpacity": 0.55,
-    "textShadow": true
+    "bottomGradientOpacity": 0.0,
+    "textShadow": false
   },
   "animation": {
     "verticalDriftPixels": 60,

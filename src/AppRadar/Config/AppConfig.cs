@@ -39,8 +39,19 @@ public sealed class OverlayConfig
     public string FontColor { get; set; } = "#FFFFFF";
     public int Padding { get; set; } = 64;
     public float MaxTextWidthPercent { get; set; } = 0.82f;
-    public float BottomGradientOpacity { get; set; } = 0.55f;
-    public bool TextShadow { get; set; } = true;
+    /// <summary>
+    /// Opacity of the top/bottom gradient overlays (0.0 = fully transparent, 1.0 = fully opaque).
+    /// Defaults to 0.0 (no gradient) for a clean, shadow-free look.  Increase if text contrast
+    /// requires it on your images.
+    /// </summary>
+    public float BottomGradientOpacity { get; set; } = 0.0f;
+
+    /// <summary>
+    /// Whether to draw a drop-shadow behind caption and app-name text.
+    /// Defaults to false for a clean, shadow-free look.
+    /// Set to true in config.json to re-enable.
+    /// </summary>
+    public bool TextShadow { get; set; } = false;
 }
 
 public sealed class AnimationConfig

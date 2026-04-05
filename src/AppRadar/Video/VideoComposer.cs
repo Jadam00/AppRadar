@@ -222,6 +222,13 @@ public sealed class VideoComposer
         return sb.ToString();
     }
 
+    // Minimum xfade offset in seconds — prevents an offset of 0 which FFmpeg rejects.
+    private const double MinXfadeOffsetSeconds = 0.001;
+
+    // A chunk must be displayed for at least half the xfade transition duration, otherwise
+    // the transition would start before the chunk is even fully visible.
+    private const double MinChunkDisplayFraction = 0.5;
+
     public string ComposeVideo(
         List<string> slidePaths,
         string outputVideosDir,
@@ -229,7 +236,8 @@ public sealed class VideoComposer
         int durationSeconds,
         TransitionStyle transition,
         AppConfig config,
-        string? audioPath = null)
+        string? audioPath = null,
+        IReadOnlyList<int>? chunkDurationsMs = null)
     {
         _logger.LogInformation("Composing video for reel {Id} with transition: {Transition}",
             generationId, transition);
@@ -240,28 +248,58 @@ public sealed class VideoComposer
         var outputPath = Path.Combine(outputVideosDir, $"{generationId}.mp4");
 
         int fps = config.Video.Fps;
-        int secondsPerSlide = config.Video.SecondsPerSlide;
         int width = config.Video.Width;
         int height = config.Video.Height;
         int driftPixels = config.Animation.VerticalDriftPixels;
         int transitionMs = config.Animation.TransitionDurationMs;
 
-        int cycleCount = CalculateCycleCount(durationSeconds, secondsPerSlide, slidePaths.Count,
-            transitionMs / 1000.0);
-        int totalSlides = slidePaths.Count * cycleCount;
+        string filterScript;
+        List<string> inputArgs;
 
-        var inputArgs = new List<string>();
-        for (int cycle = 0; cycle < cycleCount; cycle++)
+        if (chunkDurationsMs is not null && chunkDurationsMs.Count == slidePaths.Count)
         {
-            foreach (var slidePath in slidePaths)
-            {
-                inputArgs.Add($"-loop 1 -t {secondsPerSlide} -i \"{slidePath}\"");
-            }
-        }
+            // Narration-driven chunked composition: one input per chunk, variable durations.
+            // Input durations are inflated by the xfade transition length (except the last)
+            // so that total output exactly matches the sum of chunk display durations.
+            double transitionSec = transitionMs / 1000.0;
+            double minDisplaySec = transitionSec * MinChunkDisplayFraction;
 
-        var filterScript = BuildFilterGraph(
-            totalSlides, fps, secondsPerSlide, durationSeconds,
-            width, height, driftPixels, transitionMs, transition);
+            // Compute clamped display durations once; reuse for both input args and filter graph.
+            var displayDurSec = chunkDurationsMs
+                .Select(ms => Math.Max(ms / 1000.0, minDisplaySec))
+                .ToList();
+
+            inputArgs = new List<string>(slidePaths.Count);
+            for (int i = 0; i < slidePaths.Count; i++)
+            {
+                bool isLast = i == slidePaths.Count - 1;
+                double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
+                inputArgs.Add($"-loop 1 -t {inputSec:F3} -i \"{slidePaths[i]}\"");
+            }
+
+            filterScript = BuildFilterGraphChunked(
+                slidePaths.Count, fps, durationSeconds,
+                width, height, driftPixels, transitionMs, displayDurSec);
+        }
+        else
+        {
+            // Fixed-duration cycling composition (legacy and fallback path).
+            int secondsPerSlide = config.Video.SecondsPerSlide;
+            int cycleCount = CalculateCycleCount(durationSeconds, secondsPerSlide, slidePaths.Count,
+                transitionMs / 1000.0);
+            int totalSlides = slidePaths.Count * cycleCount;
+
+            inputArgs = new List<string>(totalSlides);
+            for (int cycle = 0; cycle < cycleCount; cycle++)
+            {
+                foreach (var slidePath in slidePaths)
+                    inputArgs.Add($"-loop 1 -t {secondsPerSlide} -i \"{slidePath}\"");
+            }
+
+            filterScript = BuildFilterGraph(
+                totalSlides, fps, secondsPerSlide, durationSeconds,
+                width, height, driftPixels, transitionMs, transition);
+        }
 
         var filterFile = Path.GetTempFileName();
         try
@@ -269,61 +307,7 @@ public sealed class VideoComposer
             File.WriteAllText(filterFile, filterScript);
             _logger.LogDebug("FFmpeg filter graph written to: {File}", filterFile);
 
-            if (audioPath is not null && File.Exists(audioPath))
-            {
-                // Two-pass: (1) render silent video, (2) mux audio
-                var silentPath = Path.Combine(outputVideosDir, $"{generationId}_silent.mp4");
-                try
-                {
-                    var videoArgs =
-                        $"{string.Join(" ", inputArgs)} " +
-                        $"-filter_complex_script \"{filterFile}\" " +
-                        $"-map \"[outv]\" " +
-                        $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
-                        $"-r {fps} -t {durationSeconds} " +
-                        $"-movflags +faststart " +
-                        $"-an " +
-                        $"-y \"{silentPath}\"";
-
-                    RunFfmpegProcess(ffmpegExe, videoArgs);
-
-                    // Mux audio into final MP4.
-                    // Do NOT use -shortest here: the video duration is already computed to
-                    // match the narration audio length (narration-driven duration), so both
-                    // streams should end at approximately the same time.
-                    // Use -c:a aac to encode the audio and map both streams explicitly.
-                    var muxArgs =
-                        $"-i \"{silentPath}\" " +
-                        $"-i \"{audioPath}\" " +
-                        $"-c:v copy " +
-                        $"-c:a aac -b:a 128k " +
-                        $"-movflags +faststart " +
-                        $"-y \"{outputPath}\"";
-
-                    RunFfmpegProcess(ffmpegExe, muxArgs);
-                    _logger.LogInformation("Audio muxed into video successfully");
-                }
-                finally
-                {
-                    if (File.Exists(silentPath)) File.Delete(silentPath);
-                }
-            }
-            else
-            {
-                if (audioPath is not null)
-                    _logger.LogWarning("Audio file not found at {Path}; producing silent video", audioPath);
-
-                var args =
-                    $"{string.Join(" ", inputArgs)} " +
-                    $"-filter_complex_script \"{filterFile}\" " +
-                    $"-map \"[outv]\" " +
-                    $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
-                    $"-r {fps} -t {durationSeconds} " +
-                    $"-movflags +faststart " +
-                    $"-y \"{outputPath}\"";
-
-                RunFfmpegProcess(ffmpegExe, args);
-            }
+            ExecuteComposition(ffmpegExe, inputArgs, filterFile, outputPath, fps, durationSeconds, audioPath, outputVideosDir, generationId);
         }
         finally
         {
@@ -332,6 +316,74 @@ public sealed class VideoComposer
 
         _logger.LogInformation("Video saved to: {Path}", outputPath);
         return outputPath;
+    }
+
+    private void ExecuteComposition(
+        string ffmpegExe,
+        List<string> inputArgs,
+        string filterFile,
+        string outputPath,
+        int fps,
+        int durationSeconds,
+        string? audioPath,
+        string outputVideosDir,
+        string generationId)
+    {
+        if (audioPath is not null && File.Exists(audioPath))
+        {
+            // Two-pass: (1) render silent video, (2) mux audio
+            var silentPath = Path.Combine(outputVideosDir, $"{generationId}_silent.mp4");
+            try
+            {
+                var videoArgs =
+                    $"{string.Join(" ", inputArgs)} " +
+                    $"-filter_complex_script \"{filterFile}\" " +
+                    $"-map \"[outv]\" " +
+                    $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
+                    $"-r {fps} -t {durationSeconds} " +
+                    $"-movflags +faststart " +
+                    $"-an " +
+                    $"-y \"{silentPath}\"";
+
+                RunFfmpegProcess(ffmpegExe, videoArgs);
+
+                // Mux audio into final MP4.
+                // Do NOT use -shortest here: the video duration is already computed to
+                // match the narration audio length (narration-driven duration), so both
+                // streams should end at approximately the same time.
+                // Use -c:a aac to encode the audio and map both streams explicitly.
+                var muxArgs =
+                    $"-i \"{silentPath}\" " +
+                    $"-i \"{audioPath}\" " +
+                    $"-c:v copy " +
+                    $"-c:a aac -b:a 128k " +
+                    $"-movflags +faststart " +
+                    $"-y \"{outputPath}\"";
+
+                RunFfmpegProcess(ffmpegExe, muxArgs);
+                _logger.LogInformation("Audio muxed into video successfully");
+            }
+            finally
+            {
+                if (File.Exists(silentPath)) File.Delete(silentPath);
+            }
+        }
+        else
+        {
+            if (audioPath is not null)
+                _logger.LogWarning("Audio file not found at {Path}; producing silent video", audioPath);
+
+            var args =
+                $"{string.Join(" ", inputArgs)} " +
+                $"-filter_complex_script \"{filterFile}\" " +
+                $"-map \"[outv]\" " +
+                $"-c:v libx264 -pix_fmt yuv420p -crf 23 -preset fast " +
+                $"-r {fps} -t {durationSeconds} " +
+                $"-movflags +faststart " +
+                $"-y \"{outputPath}\"";
+
+            RunFfmpegProcess(ffmpegExe, args);
+        }
     }
 
     public static int CalculateCycleCount(
@@ -348,7 +400,7 @@ public sealed class VideoComposer
         return Math.Max(cyclesNeeded, 1);
     }
 
-    private static string BuildFilterGraph(
+    internal static string BuildFilterGraph(
         int totalSlides,
         int fps,
         int secondsPerSlide,
@@ -387,7 +439,7 @@ public sealed class VideoComposer
         for (int i = 1; i < totalSlides; i++)
         {
             double offset = i * (segDuration - transitionDuration);
-            if (offset < 0.001) offset = 0.001;
+            if (offset < MinXfadeOffsetSeconds) offset = MinXfadeOffsetSeconds;
 
             bool isLast = (i == totalSlides - 1);
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";
@@ -395,6 +447,77 @@ public sealed class VideoComposer
             sb.AppendLine(
                 $"[{prev}][v{i}]xfade=transition={transitionType}:" +
                 $"duration={transitionDuration:F3}:offset={offset:F3}[{outLabel}];");
+            prev = outLabel;
+        }
+
+        sb.AppendLine($"[outv_raw]trim=duration={durationSeconds},setpts=PTS-STARTPTS[outv]");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Builds an FFmpeg filter-graph for narration-driven (chunked) composition.
+    ///
+    /// Each chunk slide has its own display duration derived from the reveal timeline.
+    /// Non-last inputs are inflated by <paramref name="transitionMs"/> so the output
+    /// after xfade chaining equals the sum of <paramref name="displayDurSec"/>.
+    ///
+    /// Transition is always <c>slideleft</c> (horizontal scroll).
+    /// Offsets are the cumulative sum of display durations, giving precise per-chunk timing.
+    /// </summary>
+    internal static string BuildFilterGraphChunked(
+        int totalSlides,
+        int fps,
+        int durationSeconds,
+        int width,
+        int height,
+        int driftPixels,
+        int transitionMs,
+        IReadOnlyList<double> displayDurSec)
+    {
+        var sb = new System.Text.StringBuilder();
+        int scaledHeight = height + driftPixels * 2;
+        double transitionSec = transitionMs / 1000.0;
+
+        for (int i = 0; i < totalSlides; i++)
+        {
+            // The drift animation plays over the full input duration (display + transition
+            // overlap for non-last slides), so motion is proportional and never jerky.
+            bool isLast = i == totalSlides - 1;
+            double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
+
+            sb.AppendLine(
+                $"[{i}:v]" +
+                $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
+                $"crop={width}:{scaledHeight}," +
+                $"crop={width}:{height}:0:'min(t/{inputSec:F3}*{driftPixels},{driftPixels})'," +
+                $"setpts=PTS-STARTPTS" +
+                $"[v{i}];");
+        }
+
+        if (totalSlides == 1)
+        {
+            sb.AppendLine($"[v0]trim=duration={durationSeconds},setpts=PTS-STARTPTS[outv]");
+            return sb.ToString();
+        }
+
+        // xfade offsets: for inflated inputs (D[i] = displayDurSec[i] + transitionSec for
+        // non-last slides), the chained output length after k xfades is sum(d[0..k]) + t.
+        // Each new xfade starts when the previous output ends (minus one transition length):
+        //   offset[i] = (sum(d[0..i-1]) + t) - t = sum(d[0..i-1])
+        // So the offset is simply the cumulative sum of display durations — matching the comment.
+        double cumulative = 0.0;
+        string prev = "v0";
+        for (int i = 1; i < totalSlides; i++)
+        {
+            cumulative += displayDurSec[i - 1];
+            double offset = Math.Max(cumulative, MinXfadeOffsetSeconds);
+
+            bool isLast = i == totalSlides - 1;
+            string outLabel = isLast ? "outv_raw" : $"tmp{i}";
+
+            sb.AppendLine(
+                $"[{prev}][v{i}]xfade=transition=slideleft:" +
+                $"duration={transitionSec:F3}:offset={offset:F3}[{outLabel}];");
             prev = outLabel;
         }
 

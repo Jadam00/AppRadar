@@ -142,8 +142,8 @@ public sealed class ReelPlanner
             CtaText        = ctaCaption
         };
 
-        // Choose transition
-        var transition = (TransitionStyle)rng.Next(0, 2);
+        // Structured marketing reels always use horizontal scroll (slideleft xfade).
+        var transition = TransitionStyle.Slide;
         _logger.LogInformation("Transition: {Transition}", transition);
 
         // Assemble plan — all slides use the SAME source image
