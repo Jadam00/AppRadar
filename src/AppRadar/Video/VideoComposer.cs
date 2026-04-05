@@ -500,15 +500,17 @@ public sealed class VideoComposer
             return sb.ToString();
         }
 
-        // xfade offsets: offset[i] = sum of display durations of all preceding slides.
-        // This gives each chunk exactly its measured display time before the next slide appears.
+        // xfade offsets: for inflated inputs (D[i] = displayDurSec[i] + transitionSec for
+        // non-last slides), the chained output length after k xfades is sum(d[0..k]) + t.
+        // Each new xfade starts when the previous output ends (minus one transition length):
+        //   offset[i] = (sum(d[0..i-1]) + t) - t = sum(d[0..i-1])
+        // So the offset is simply the cumulative sum of display durations — matching the comment.
         double cumulative = 0.0;
         string prev = "v0";
         for (int i = 1; i < totalSlides; i++)
         {
             cumulative += displayDurSec[i - 1];
-            double offset = cumulative - (i - 1) * transitionSec;
-            if (offset < MinXfadeOffsetSeconds) offset = MinXfadeOffsetSeconds;
+            double offset = Math.Max(cumulative, MinXfadeOffsetSeconds);
 
             bool isLast = i == totalSlides - 1;
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";

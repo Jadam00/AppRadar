@@ -304,6 +304,28 @@ public sealed class StructuredReelBehaviorTests
     }
 
     [Fact]
+    public void BuildFilterGraphChunked_OffsetForThirdSlide_IsCorrect()
+    {
+        // With display durations [2.0, 3.0, 2.0] and transition 0.6s:
+        // - xfade[1] offset = d[0] = 2.0
+        // - xfade[2] offset = d[0]+d[1] = 5.0  (NOT 5.0 - 0.6 = 4.4)
+        var durations = new List<double> { 2.0, 3.0, 2.0 };
+        var script = VideoComposer.BuildFilterGraphChunked(
+            totalSlides: 3, fps: 30, durationSeconds: 7,
+            width: 1080, height: 1920, driftPixels: 60,
+            transitionMs: 600, displayDurSec: durations);
+
+        var offsets = System.Text.RegularExpressions.Regex
+            .Matches(script, @"offset=(\d+\.\d+)")
+            .Select(m => double.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+
+        Assert.Equal(2, offsets.Count);
+        Assert.Equal(2.0, offsets[0], precision: 2);   // d[0] = 2.0
+        Assert.Equal(5.0, offsets[1], precision: 2);   // d[0]+d[1] = 5.0
+    }
+
+    [Fact]
     public void BuildFilterGraphChunked_ContainsOutvLabel()
     {
         var durations = new List<double> { 2.0, 3.0 };
