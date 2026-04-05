@@ -2,8 +2,8 @@
 
 A .NET 10 CLI tool that generates short vertical marketing reels from local app images and metadata.
 Produces H.264 MP4 videos built around a **single app**, following a 4-stage marketing narrative
-with optional LLM-rewritten narration, Windows TTS audio, progressive caption sync, and subtle
-drift animation — ready for Instagram Reels or TikTok-style uploads.
+with optional LLM-rewritten narration, Windows TTS audio, progressive caption sync, vertical scroll
+slide transitions, and subtle drift animation — ready for Instagram Reels or TikTok-style uploads.
 
 > **Windows Only** — AppRadar is designed and tested for **Windows 11 / Windows Server**.
 > Linux and macOS are not supported.
@@ -12,9 +12,22 @@ drift animation — ready for Instagram Reels or TikTok-style uploads.
 
 ## What's New
 
+### Reel Renderer Refinements (v4)
+
+- **Vertical scroll transitions** — slides move upward between caption chunks (`slideup` xfade); no
+  more horizontal slide or random transition selection in structured mode.
+- **Captions sourced from final narration text** — on-screen caption chunks are always split from the
+  exact same narration paragraph used for TTS speech. There is no divergence between what is spoken
+  and what is shown.
+- **Shadow-free output by default** — `textShadow` is now `false` and `bottomGradientOpacity` is
+  `0.0` by default. The output looks clean and flat. Both settings remain configurable.
+- **Narration-length-driven timing** — each slide/chunk is displayed for a duration proportional to
+  its share of the total audio. When chunk count matches slide count the mapping is exact; otherwise
+  total duration is distributed equally. No fixed `secondsPerSlide` is used in narration-driven mode.
+
 ### Single-App Reel Engine (v3)
 
-Each reel is now a **one-app mini-advert**:
+Each reel is a **one-app mini-advert**:
 
 - **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
 - **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
@@ -364,8 +377,8 @@ To also generate placeholder images during setup:
     "fontColor": "#FFFFFF",
     "padding": 64,
     "maxTextWidthPercent": 0.82,
-    "bottomGradientOpacity": 0.55,
-    "textShadow": true
+    "bottomGradientOpacity": 0.0,
+    "textShadow": false
   },
   "animation": {
     "verticalDriftPixels": 60,
@@ -416,6 +429,22 @@ To also generate placeholder images during setup:
 }
 ```
 
+### Overlay / visual configuration
+
+| Field | Default | Description |
+|---|---|---|
+| `overlay.fontFamily` | `"Arial"` | Font family for captions and app name |
+| `overlay.fontSize` | `72` | Font size in points |
+| `overlay.fontColor` | `"#FFFFFF"` | Caption text colour (hex) |
+| `overlay.padding` | `64` | Pixel padding from canvas edges |
+| `overlay.maxTextWidthPercent` | `0.82` | Maximum caption width as a fraction of canvas width |
+| `overlay.bottomGradientOpacity` | `0.0` | Opacity of the bottom gradient overlay (0 = none, 1 = fully black). Default `0.0` — shadow-free. |
+| `overlay.textShadow` | `false` | Draw a drop shadow under caption text. Default `false` — shadow-free. |
+
+> **Shadow-free by default.** Both `textShadow` and `bottomGradientOpacity` are off by default.
+> To re-enable a subtle gradient for readability on bright images set `"bottomGradientOpacity": 0.35`.
+> To re-enable text shadow set `"textShadow": true`.
+
 ### Audio configuration
 
 | Field | Default | Description |
@@ -448,6 +477,19 @@ To also generate placeholder images during setup:
 | `captionSync.mode` | `"Chunked"` | How narration is split for progressive reveal (`"Chunked"` splits at sentence boundaries) |
 | `captionSync.tailHoldMs` | `800` | Extra hold time after the last narration word ends (ms) |
 | `captionSync.minVisualDurationMs` | `4000` | Minimum total visual duration when narration is very short (ms) |
+
+### Slide transition and timing
+
+In `StructuredMarketing` mode, the pipeline always uses a **vertical scroll** (`slideup`) transition
+between caption chunks so the viewer perceives a smooth upward movement.
+
+**Narration-length-driven timing** — when audio is generated, each slide/chunk is displayed for a
+duration proportional to its word count within the total narration length.  The total video length
+equals `measuredAudioDurationMs + tailHoldMs` (clamped to `minVisualDurationMs`).  No fixed
+`secondsPerSlide` value is applied in narration-driven mode.
+
+If audio is disabled, the pipeline falls back to fixed `secondsPerSlide` with cycling to fill
+`defaultDurationSeconds`.
 
 ### Strategy configuration
 

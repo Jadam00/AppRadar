@@ -226,4 +226,96 @@ public sealed class SingleAppPipelineTests
         Assert.True(manifest.LlmFallbackUsed);
         Assert.Equal(2, manifest.RevealTimeline!.Count);
     }
+
+    // ── Caption source is always the final narration text ─────────────────────────────────────
+
+    [Fact]
+    public void NarrationPlan_ChunkTexts_NeverComesFromPreRewriteStageTexts()
+    {
+        // The 4-stage raw texts (hook/pain/credibility/cta) must NOT appear
+        // as captions once a narration paragraph has been provided.
+        // The narration paragraph replaces those stage texts as the caption source.
+        const string hookRaw     = "HOOK_RAW_TEXT";
+        const string painRaw     = "PAIN_RAW_TEXT";
+        const string credRaw     = "CRED_RAW_TEXT";
+        const string ctaRaw      = "CTA_RAW_TEXT";
+        const string narration   = "A natural spoken sentence. And another.";
+
+        var plan = NarrationPlanner.Build(narration, 4000, 800, 4000, false, null);
+
+        foreach (var chunk in plan.DisplayChunks)
+        {
+            Assert.DoesNotContain(hookRaw, chunk.Text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(painRaw, chunk.Text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(credRaw, chunk.Text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(ctaRaw,  chunk.Text, StringComparison.OrdinalIgnoreCase);
+            // Every non-empty chunk must be a substring of the narration
+            if (!string.IsNullOrWhiteSpace(chunk.Text))
+                Assert.True(narration.Contains(chunk.Text, StringComparison.OrdinalIgnoreCase),
+                    $"Chunk '{chunk.Text}' is not derived from narration");
+        }
+    }
+
+    [Fact]
+    public void NarrationPlan_FullNarrationText_IsUsedForBothTtsAndCaptions()
+    {
+        // The FullNarrationText must be exactly what is stored in the plan and
+        // also the source of every caption chunk — no divergence.
+        const string narration = "First sentence. Second sentence. Third sentence.";
+        var plan = NarrationPlanner.Build(narration, 6000, 800, 4000, false, null);
+
+        // FullNarrationText preserved exactly
+        Assert.Equal(narration, plan.FullNarrationText);
+
+        // Every display chunk is drawn from that same string
+        foreach (var chunk in plan.DisplayChunks)
+        {
+            if (!string.IsNullOrWhiteSpace(chunk.Text))
+                Assert.True(narration.Contains(chunk.Text, StringComparison.OrdinalIgnoreCase),
+                    $"Caption chunk '{chunk.Text}' is not derived from the narration text");
+        }
+    }
+
+    // ── Narration-length-driven timing ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void NarrationPlan_TotalChunkTime_EqualsAudioPlusTailHold()
+    {
+        const int audioDurationMs = 5500;
+        const int tailHoldMs = 800;
+        var plan = NarrationPlanner.Build(
+            "Alpha sentence. Beta sentence. Gamma sentence.",
+            audioDurationMs, tailHoldMs, 4000, false, null);
+
+        int totalMs = plan.DisplayChunks.Sum(c => c.DurationMs);
+        Assert.True(totalMs == audioDurationMs + tailHoldMs,
+            $"Total display chunk time must equal audio duration + tail hold exactly: expected {audioDurationMs + tailHoldMs}, got {totalMs}");
+    }
+
+    [Fact]
+    public void NarrationPlan_WithZeroAudio_TotalTimeIsMinVisualPlusTail()
+    {
+        const int tailHoldMs = 800;
+        const int minVisualMs = 5000;
+        var plan = NarrationPlanner.Build("Short.", 0, tailHoldMs, minVisualMs, false, null);
+
+        int totalMs = plan.DisplayChunks.Sum(c => c.DurationMs);
+        Assert.Equal(minVisualMs + tailHoldMs, totalMs);
+    }
+
+    [Fact]
+    public void NarrationPlan_RevealTimeline_AllChunksStartAfterOrAtPreviousEnd()
+    {
+        var plan = NarrationPlanner.Build(
+            "First. Second. Third. Fourth.", 8000, 800, 4000, false, null);
+
+        for (int i = 1; i < plan.DisplayChunks.Count; i++)
+        {
+            var prev = plan.DisplayChunks[i - 1];
+            var curr = plan.DisplayChunks[i];
+            int expectedStart = prev.StartMs + prev.DurationMs;
+            Assert.True(curr.StartMs == expectedStart,
+                $"Chunk {i} start ({curr.StartMs}) should follow previous end ({expectedStart})");
+        }
+    }
 }

@@ -431,4 +431,21 @@ public sealed class ReelPlannerTests
         foreach (var slide in plan.Slides)
             Assert.Equal(sps, slide.DurationSeconds);
     }
+
+    // ── Vertical scroll transition ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Plan_StructuredMode_AlwaysUsesSlideTransition()
+    {
+        var planner = CreatePlanner();
+        var myApps = new List<AppSource> { CreateRichMyAppSource("TestApp") };
+
+        // Verify across multiple seeds that structured mode always returns Slide (vertical scroll)
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var plan = planner.Plan([], myApps, new Random(seed));
+            Assert.True(plan.Transition == TransitionStyle.Slide,
+                $"Expected TransitionStyle.Slide for structured mode at seed={seed}, got {plan.Transition}");
+        }
+    }
 }

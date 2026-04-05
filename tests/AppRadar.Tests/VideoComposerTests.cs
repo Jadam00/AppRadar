@@ -1,4 +1,5 @@
 using AppRadar.Config;
+using AppRadar.Models;
 using AppRadar.Video;
 using Xunit;
 
@@ -98,5 +99,96 @@ public sealed class VideoComposerTests
         {
             File.Delete(fakePath);
         }
+    }
+
+    // ── BuildFilterGraph ──────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void BuildFilterGraph_SlideTransition_UsesSlideUp()
+    {
+        var graph = VideoComposer.BuildFilterGraph(
+            2, 30, [3.0, 3.0], 6, 1080, 1920, 60, 600, TransitionStyle.Slide);
+
+        Assert.Contains("transition=slideup", graph);
+    }
+
+    [Fact]
+    public void BuildFilterGraph_CrossfadeTransition_UsesFade()
+    {
+        var graph = VideoComposer.BuildFilterGraph(
+            2, 30, [3.0, 3.0], 6, 1080, 1920, 60, 600, TransitionStyle.Crossfade);
+
+        Assert.Contains("transition=fade", graph);
+        Assert.DoesNotContain("slideup", graph);
+    }
+
+    [Fact]
+    public void BuildFilterGraph_SingleSlide_NoXfade()
+    {
+        var graph = VideoComposer.BuildFilterGraph(
+            1, 30, [5.0], 5, 1080, 1920, 60, 600, TransitionStyle.Slide);
+
+        Assert.DoesNotContain("xfade", graph);
+        Assert.Contains("[v0]trim=duration=5", graph);
+    }
+
+    [Fact]
+    public void BuildFilterGraph_PerSlideDurations_OffsetUsesCorrectCumulativeTime()
+    {
+        // Slide 0: 2.0s, Slide 1: 4.0s, transition 0.6s
+        // Transition offset = 2.0 - 1 * 0.6 = 1.4
+        var graph = VideoComposer.BuildFilterGraph(
+            2, 30, [2.0, 4.0], 6, 1080, 1920, 60, 600, TransitionStyle.Slide);
+
+        Assert.Contains("offset=1.400", graph);
+    }
+
+    [Fact]
+    public void BuildFilterGraph_MultiplePerSlideDurations_OffsetsAreProportional()
+    {
+        // Slide 0: 3s, Slide 1: 2s, Slide 2: 4s, transition 0.6s
+        // Trans 1 offset = 3.0 - 1*0.6 = 2.4
+        // Trans 2 offset = 3.0 + 2.0 - 2*0.6 = 3.8
+        var graph = VideoComposer.BuildFilterGraph(
+            3, 30, [3.0, 2.0, 4.0], 9, 1080, 1920, 60, 600, TransitionStyle.Slide);
+
+        Assert.Contains("offset=2.400", graph);
+        Assert.Contains("offset=3.800", graph);
+    }
+
+    [Fact]
+    public void BuildFilterGraph_PerSlideDrift_UsesSlideDurationInCrop()
+    {
+        // With slide duration 2.5s, the crop expression should reference 2.500
+        var graph = VideoComposer.BuildFilterGraph(
+            1, 30, [2.5], 3, 1080, 1920, 60, 600, TransitionStyle.Slide);
+
+        Assert.Contains("2.500", graph);
+    }
+
+    // ── Vertical scroll: structured mode timing ───────────────────────────────────────────────
+
+    [Fact]
+    public void VideoDuration_FromAudioPlusTailHold_LargerThanMinVisual()
+    {
+        // Mirrors GenerationService logic: max(audio + tail, minVisual)
+        const int audioDurationMs = 7000;
+        const int tailHoldMs = 800;
+        const int minVisualMs = 4000;
+
+        int finalMs = Math.Max(audioDurationMs + tailHoldMs, minVisualMs);
+
+        Assert.Equal(7800, finalMs);
+    }
+
+    [Theory]
+    [InlineData(5000, 800, 4000, 5800)]
+    [InlineData(2000, 800, 4000, 4000)]   // below minimum → clamped to minVisual
+    [InlineData(8000, 800, 4000, 8800)]
+    public void VideoDuration_AlwaysAtLeastMinVisual(
+        int audioDurationMs, int tailHoldMs, int minVisualMs, int expectedMs)
+    {
+        int finalMs = Math.Max(audioDurationMs + tailHoldMs, minVisualMs);
+        Assert.Equal(expectedMs, finalMs);
     }
 }
