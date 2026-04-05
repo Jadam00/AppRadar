@@ -326,10 +326,11 @@ public sealed class PiperTtsProvider : ITtsProvider
                 $"Failed to start Piper process. Executable: {exe}");
 
         // Send narration text via stdin; closing signals end of input to Piper
-        process.StandardInput.Write(text);
+        process.StandardInput.WriteLine(text);
         process.StandardInput.Close();
 
-        var stderr = process.StandardError.ReadToEnd();
+        // Read stderr asynchronously to prevent deadlock if the buffer fills before exit
+        var stderrTask = process.StandardError.ReadToEndAsync();
         var completed = process.WaitForExit(TimeSpan.FromSeconds(timeoutSeconds));
 
         if (!completed)
@@ -340,7 +341,7 @@ public sealed class PiperTtsProvider : ITtsProvider
                 $"Executable: {exe}");
         }
 
-        return (process.ExitCode, stderr);
+        return (process.ExitCode, stderrTask.GetAwaiter().GetResult());
     }
 
     // ── Cleanup ───────────────────────────────────────────────────────────────────────────────
