@@ -4,7 +4,7 @@
     "height": 1920,
     "fps": 30,
     "defaultDurationSeconds": 24,
-    "secondsPerSlide": 4
+    "secondsPerSlide": 5
   },
   "overlay": {
     "fontFamily": "Arial",
@@ -24,19 +24,19 @@
     "ffprobePath": null
   },
   "audio": {
-    "enabled": false,
-    "ttsProvider": "SystemSpeech",
+    "enabled": true,
+    "ttsProvider": "piper",
     "voiceName": null,
-    "rate": 0,
+    "rate": -4,
     "volume": 100,
     "leadInMs": 150,
     "gapBetweenSlidesMs": 300,
     "normalizeAudio": true,
     "piper": {
-      "exePath": null,
-      "modelPath": null,
+      "exePath": "C:\\Program Files\\piper\\piper.exe",
+      "modelPath": "C:\\Program Files\\piper\\models\\en_GB-jenny_dioco-medium.onnx",
       "speaker": null,
-      "lengthScale": 1.0,
+      "lengthScale": 1.3,
       "noiseScale": 0.667,
       "noiseW": 0.8
     }
@@ -46,7 +46,7 @@
     "allowLegacyShuffleMode": true
   },
   "llm": {
-    "enabled": false,
+    "enabled": true,
     "provider": "Ollama",
     "ollama": {
       "baseUrl": "http://localhost:11434",
@@ -59,6 +59,6 @@
   "captionSync": {
     "mode": "Chunked",
     "tailHoldMs": 800,
-    "minVisualDurationMs": 4000
+    "minVisualDurationMs": 5000
   }
 }
