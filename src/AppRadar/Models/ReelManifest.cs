@@ -10,6 +10,8 @@ public sealed class ReelManifest
     public int Height { get; set; }
     public int Fps { get; set; }
     public string TransitionStyle { get; set; } = string.Empty;
+    public string Strategy { get; set; } = string.Empty;
+    public bool HasAudio { get; set; }
     public string VideoPath { get; set; } = string.Empty;
     public List<string> SlidePaths { get; set; } = new();
     public List<SlideSelection> Slides { get; set; } = new();

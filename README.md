@@ -1,11 +1,38 @@
 # AppRadar
 
 A .NET 10 CLI tool that generates short vertical marketing reels from local app images and metadata.
-Produces real H.264 MP4 videos with slide transitions, caption overlays, and subtle drift animation —
+Produces H.264 MP4 videos with a structured narrative arc, slide transitions, caption overlays,
+subtle drift animation, and optional Windows TTS narration audio —
 ready for Instagram Reels or TikTok-style uploads.
 
 > **Windows Only** — AppRadar is designed and tested for **Windows 11 / Windows Server**.
 > Linux and macOS are not supported.
+
+---
+
+## What's New
+
+### Structured Narrative Engine (v2)
+
+AppRadar no longer produces a random slideshow.  
+Each reel now follows a deliberate **4-stage marketing flow**:
+
+| Slide | Role | Purpose |
+|---|---|---|
+| 1 | **Hook** | Stop the scroll — bold claim, tension, or curiosity |
+| 2 | **Pain Point** | Identify a problem or intriguing angle |
+| 3 | **Credibility** | Evidence, contrast, build-up toward the reveal |
+| 4 | **CTA** | Your app as the payoff with a clear call-to-action |
+
+### TTS Narration (Windows)
+
+Enable audio to generate spoken narration from slide captions and mux it into the MP4:
+
+```powershell
+dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+```
+
+Narration uses the Windows SAPI `SpeechSynthesizer` (no external API, no cloud).
 
 ---
 
@@ -15,7 +42,7 @@ ready for Instagram Reels or TikTok-style uploads.
 |---|---|
 | **Windows 11 / Windows Server** | Required platform |
 | **.NET 10 SDK** | https://dotnet.microsoft.com/download/dotnet/10.0 |
-| **FFmpeg** | Used for video encoding — see [FFmpeg Setup](#ffmpeg-setup) below |
+| **FFmpeg** | Used for video encoding and audio muxing — see [FFmpeg Setup](#ffmpeg-setup) |
 
 Verify your .NET SDK version in PowerShell:
 
@@ -38,15 +65,18 @@ cd AppRadar
 # 3. Generate placeholder images for testing (no real screenshots needed)
 dotnet run --project src\AppRadar -- setup --input input
 
-# 4. Generate a reel
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24
+# 4. Generate a structured marketing reel
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16
+
+# 5. Generate a reel with narration audio (Windows only)
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
 ```
 
 ---
 
 ## FFmpeg Setup
 
-AppRadar uses FFmpeg for video encoding. Install it using one of the following methods:
+AppRadar uses FFmpeg for video encoding and audio muxing. Install it using one of the following methods:
 
 ### Option 1 — winget (recommended)
 
@@ -107,9 +137,6 @@ AppRadar searches in this order and uses the first match:
 4. Each directory listed in the `PATH` environment variable (checks `ffmpeg.exe` and `ffmpeg`)
 5. Direct execution probe (covers shims and wrappers not represented as plain files)
 
-If FFmpeg cannot be found, AppRadar prints a detailed error message listing exactly what was searched
-and how to fix it.
-
 ---
 
 ## Setup Script
@@ -147,7 +174,7 @@ To also generate placeholder images during setup:
     "height": 1920,
     "fps": 30,
     "defaultDurationSeconds": 24,
-    "secondsPerSlide": 3
+    "secondsPerSlide": 4
   },
   "overlay": {
     "fontFamily": "Arial",
@@ -165,9 +192,43 @@ To also generate placeholder images during setup:
   "tools": {
     "ffmpegPath": null,
     "ffprobePath": null
+  },
+  "audio": {
+    "enabled": false,
+    "ttsProvider": "SystemSpeech",
+    "voiceName": null,
+    "rate": 0,
+    "volume": 100,
+    "leadInMs": 150,
+    "gapBetweenSlidesMs": 300,
+    "normalizeAudio": true
+  },
+  "strategy": {
+    "mode": "StructuredMarketing",
+    "allowLegacyShuffleMode": true
   }
 }
 ```
+
+### Audio configuration
+
+| Field | Default | Description |
+|---|---|---|
+| `enabled` | `false` | Generate and mux narration audio into the MP4 |
+| `ttsProvider` | `"SystemSpeech"` | TTS backend to use. Currently: `SystemSpeech` (Windows SAPI) |
+| `voiceName` | `null` | SAPI voice name (e.g. `"Microsoft Zira Desktop"`). `null` = system default |
+| `rate` | `0` | Speaking rate: `-10` (slowest) to `10` (fastest) |
+| `volume` | `100` | Volume 0–100 |
+| `leadInMs` | `150` | Silence before first word of each slide (ms) |
+| `gapBetweenSlidesMs` | `300` | Silence between narrated slide segments (ms) |
+| `normalizeAudio` | `true` | Apply FFmpeg `loudnorm` filter to even out audio levels |
+
+### Strategy configuration
+
+| Field | Default | Description |
+|---|---|---|
+| `mode` | `"StructuredMarketing"` | `"StructuredMarketing"` (4-stage narrative) or `"Legacy"` (original random shuffle) |
+| `allowLegacyShuffleMode` | `true` | When `true`, `--strategy legacy` is accepted on the CLI |
 
 ### Supported environment variables
 
@@ -184,25 +245,27 @@ To also generate placeholder images during setup:
 AppRadar\
 ├── src\
 │   └── AppRadar\                   # Main CLI application
+│       ├── Audio\                  # ITtsProvider, SystemSpeechTtsProvider, TtsProviderFactory
 │       ├── Commands\
 │       ├── Config\
 │       ├── Models\
 │       ├── Rendering\
-│       ├── Services\
+│       ├── Services\               # ReelPlanner, SelectionService, GenerationService, …
 │       ├── Utilities\
 │       ├── Video\
 │       └── Program.cs
 ├── tests\
-│   └── AppRadar.Tests\             # Unit tests
+│   └── AppRadar.Tests\             # Unit tests (44 tests)
 ├── input\
 │   ├── config.json                 # Optional configuration overrides
 │   ├── featuredApps\
 │   │   ├── images\                 # Featured app screenshots (.png/.jpg)
-│   │   └── description.json        # App metadata and captions
+│   │   └── description.json        # App metadata with structured caption fields
 │   └── myApps\
 │       ├── images\                 # Your app screenshots
-│       └── description.json
+│       └── description.json        # Your app metadata with CTA captions
 ├── output\
+│   ├── audio\                      # Generated narration WAV files
 │   ├── images\                     # Rendered slide PNGs
 │   ├── videos\                     # Generated MP4 files
 │   └── manifests\                  # JSON manifest per reel
@@ -215,7 +278,9 @@ AppRadar\
 
 ## Metadata Format
 
-Both `featuredApps\description.json` and `myApps\description.json` use the same format:
+Both `featuredApps\description.json` and `myApps\description.json` use the same format.
+
+### Backwards-compatible extended schema
 
 ```json
 {
@@ -224,9 +289,21 @@ Both `featuredApps\description.json` and `myApps\description.json` use the same 
       "imageName": "my_app.png",
       "appName": "My App Name",
       "captions": [
-        "First caption option",
-        "Second caption option",
-        "Third caption option"
+        "Generic fallback caption"
+      ],
+      "hookCaptions": [
+        "Hard hook line 1",
+        "Hard hook line 2"
+      ],
+      "painPointCaptions": [
+        "Pain point or curiosity line"
+      ],
+      "credibilityCaptions": [
+        "Credibility or comparison line"
+      ],
+      "ctaCaptions": [
+        "Download now",
+        "Try it today"
       ],
       "tags": ["productivity", "utility"],
       "enabled": true
@@ -235,11 +312,16 @@ Both `featuredApps\description.json` and `myApps\description.json` use the same 
 }
 ```
 
+**Role-specific caption fields are optional.**  
+When a role-specific list is absent or empty, the planner falls back to the generic
+`captions` list, then to built-in templates derived from the app's tags and name.
+
 **Validation rules:**
 - `enabled: false` items are skipped entirely
 - `imageName` must be unique within the file
 - The image file referenced by `imageName` must exist in the `images\` subfolder
-- `captions` must not be empty
+- `captions` must not be empty (at least one generic caption is required as fallback)
+- Role-specific caption fields (`hookCaptions`, `painPointCaptions`, etc.) are optional
 - At least **3 enabled** featured apps are required
 - At least **1 enabled** myApp is required
 
@@ -263,15 +345,19 @@ If you don't have real app screenshots yet, generate colorful placeholder images
 dotnet run --project src\AppRadar -- setup --input input
 ```
 
-This reads `description.json` files and generates a PNG for each enabled app entry.
-
-### 3. Generate a reel
+### 3. Generate a structured marketing reel
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 ```
 
-Output files are written to `output\videos\`, `output\images\`, and `output\manifests\`.
+### 4. Generate a reel with narration audio (Windows)
+
+```powershell
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+```
+
+Output files are written to `output\videos\`, `output\images\`, `output\audio\`, and `output\manifests\`.
 
 ---
 
@@ -285,12 +371,14 @@ Generates one or more reel videos.
 appradar generate [options]
 
 Options:
-  --count <number>      Number of reels to generate (default: 1)
-  --duration <seconds>  Target duration per reel in seconds (default: 24)
-  --seed <number>       Seed for deterministic output (optional)
-  --fps <number>        Frames per second, overrides config (optional)
-  --input <path>        Input directory path (default: input)
-  --output <path>       Output directory path (default: output)
+  --count <number>         Number of reels to generate (default: 1)
+  --duration <seconds>     Target duration per reel in seconds (default: 24)
+  --seed <number>          Seed for deterministic output (optional)
+  --fps <number>           Frames per second, overrides config (optional)
+  --input <path>           Input directory path (default: input)
+  --output <path>          Output directory path (default: output)
+  --with-audio <bool>      Generate narration audio: true or false (overrides config audio.enabled)
+  --strategy <name>        Narrative strategy: structured (default) or legacy
 ```
 
 ### `setup`
@@ -306,59 +394,93 @@ appradar setup [--input <path>]
 ## Example Commands (PowerShell)
 
 ```powershell
-# Generate 1 reel, 24 seconds
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24
+# Generate 1 structured reel, 16 seconds
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 
-# Generate 5 reels, 30 seconds each
-dotnet run --project src\AppRadar -- generate --count 5 --duration 30
+# Generate a reel with TTS narration audio
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16 --with-audio true
+
+# Use the original legacy shuffle mode
+dotnet run --project src\AppRadar -- generate --count 1 --duration 24 --strategy legacy
 
 # Deterministic output with seed
-dotnet run --project src\AppRadar -- generate --count 2 --duration 24 --seed 123
+dotnet run --project src\AppRadar -- generate --count 2 --duration 16 --seed 123
+
+# Generate 5 reels
+dotnet run --project src\AppRadar -- generate --count 5 --duration 16
 
 # Custom input/output directories
-dotnet run --project src\AppRadar -- generate --count 2 --duration 24 --input .\input --output .\output
+dotnet run --project src\AppRadar -- generate --count 1 --input .\input --output .\output
 
 # Generate placeholder images for testing
 dotnet run --project src\AppRadar -- setup --input input
 
 # Use explicit FFmpeg path via environment variable
 $env:FFMPEG_PATH = "C:\ffmpeg\bin\ffmpeg.exe"
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 ```
 
-### Running from Visual Studio
-
-Open `AppRadar.slnx` in Visual Studio, set `AppRadar` as the startup project, and configure
-launch arguments in the project's debug profile (e.g. `generate --count 1 --duration 24`).
-Visual Studio sets the working directory to the project folder by default; use absolute paths or
-adjust the working directory in the debug profile if needed.
-
 ---
 
-## How Deterministic Mode Works (`--seed`)
+## How the Narrative Engine Works
+
+### Structured Marketing mode (default)
+
+The `ReelPlanner` service builds each reel in four intentional stages:
+
+**1. HOOK** — Pick a featured app whose hook captions feel punchy and short.  
+**2. PAIN POINT** — Pick a different featured app (preferring distinct tags) whose pain-point copy creates tension.  
+**3. CREDIBILITY** — Pick a third featured app that builds toward the payoff.  
+**4. CTA** — Place your app as the final slide with a clear call to action.
+
+Caption selection uses a heuristic scorer that:
+- Prefers short captions (≤ 50 chars ideal)
+- Rewards captions with exclamation points or questions
+- Penalises very long captions (> 90 chars)
+- Avoids duplicate wording across slides
+- Prefers apps with distinct tags across the reel
+
+### Legacy mode
+
+Passing `--strategy legacy` restores the original behaviour:
+- 3 random featured apps selected
+- 1 random myApp selected
+- Order shuffled randomly
+- Transition style chosen at random
+
+### Determinism
 
 When `--seed` is provided:
-
-- All random selections (featured app picks, myApp pick, caption selection, slide shuffle, transition choice) use a seeded `System.Random` instance
-- For multiple reels (`--count > 1`), each reel uses `seed + (reelIndex - 1)`, so reel 1 uses `seed`, reel 2 uses `seed + 1`, etc.
-- Running the same command with the same `--seed` always produces identical output
-
-Without `--seed`, `Random.Shared.Next()` generates a different seed each run.
+- All random selections use a seeded `System.Random` instance
+- For multiple reels (`--count > 1`), reel N uses `seed + (N - 1)`
+- Same seed always produces identical output
 
 ---
 
-## Selection Logic
+## How TTS Narration Works
 
-Per generated reel:
-1. Load all **enabled** featured apps (requires ≥ 3)
-2. Load all **enabled** myApps (requires ≥ 1)
-3. Randomly pick **3 unique** featured apps
-4. Randomly pick **1 unique** myApp
-5. Randomly pick **1 caption** from each selected app's caption list
-6. **Shuffle** the 4 slides into a random display order
-7. Randomly choose **one transition style** for the whole reel:
-   - `Crossfade` — smooth fade between slides
-   - `Slide` — horizontal slide transition
+When audio is enabled, the pipeline adds two steps after slide rendering:
+
+1. **Narration generation** — The `SystemSpeechTtsProvider` uses the Windows SAPI
+   `SpeechSynthesizer` (from `System.Speech`) to synthesise each slide's narration text
+   into a per-segment WAV file.  FFmpeg then concatenates the segments — inserting
+   configurable silence gaps — and optionally normalises the audio with `loudnorm`.
+
+2. **Video + audio muxing** — The video is rendered as a silent MP4 first, then FFmpeg
+   muxes it with the narration WAV (`-c:a aac -b:a 128k -shortest`) to produce the
+   final file.
+
+**TTS voice selection:**  
+Set `audio.voiceName` in config to use a specific SAPI voice, e.g.:
+```json
+"audio": { "voiceName": "Microsoft Zira Desktop" }
+```
+Leave it `null` to use the Windows system default voice.
+
+**Why System.Speech?**  
+`System.Speech.Synthesis.SpeechSynthesizer` is a built-in Windows API — no cloud service,
+no API keys, no internet required.  It runs entirely locally and produces standard WAV output
+that FFmpeg can mux directly.
 
 ---
 
@@ -369,38 +491,44 @@ Each generation produces:
 | File | Location | Description |
 |---|---|---|
 | Slide PNGs | `output\images\` | Rendered slide images with caption overlays |
-| MP4 video | `output\videos\` | Final H.264 vertical reel video |
+| MP4 video | `output\videos\` | Final H.264 vertical reel (with or without audio) |
+| Narration WAV | `output\audio\` | Raw TTS audio (only when `--with-audio true`) |
 | Manifest JSON | `output\manifests\` | Full metadata about what was generated |
 
 File names include a timestamp and short random ID, e.g.:
 ```
-reel_20260403_120000_a1b2c3d4.mp4
-reel_20260403_120000_a1b2c3d4_slide01.png
-reel_20260403_120000_a1b2c3d4_manifest.json
+reel_20260404_120000_a1b2c3d4.mp4
+reel_20260404_120000_a1b2c3d4_narration.wav
+reel_20260404_120000_a1b2c3d4_slide01.png
+reel_20260404_120000_a1b2c3d4_manifest.json
 ```
 
 ### Manifest structure
 
 ```json
 {
-  "GenerationId": "reel_20260403_120000_a1b2c3d4",
-  "CreatedUtc": "2026-04-03T12:00:00Z",
+  "GenerationId": "reel_20260404_120000_a1b2c3d4",
+  "CreatedUtc": "2026-04-04T12:00:00Z",
   "SeedUsed": 42,
-  "DurationSeconds": 24,
+  "DurationSeconds": 16,
   "Width": 1080,
   "Height": 1920,
   "Fps": 30,
   "TransitionStyle": "Crossfade",
-  "VideoPath": "output\\videos\\reel_20260403_120000_a1b2c3d4.mp4",
+  "Strategy": "StructuredMarketing",
+  "HasAudio": true,
+  "VideoPath": "output\\videos\\reel_20260404_120000_a1b2c3d4.mp4",
   "SlidePaths": ["..."],
   "Slides": [
     {
       "Slot": 1,
+      "Role": "Hook",
       "SourceType": "Featured",
-      "AppName": "Adobe Express",
-      "ImageName": "adobe_express.png",
-      "SelectedCaption": "Design in minutes",
-      "SourcePath": "input\\featuredApps\\images\\adobe_express.png",
+      "AppName": "Canva",
+      "ImageName": "canva.jpg",
+      "SelectedCaption": "Stop settling for boring visuals",
+      "NarrationText": "Stop settling for boring visuals",
+      "SourcePath": "input\\featuredApps\\images\\canva.jpg",
       "RenderedSlidePath": "output\\images\\reel_..._slide01.png"
     }
   ]
@@ -417,7 +545,7 @@ reel_20260403_120000_a1b2c3d4_manifest.json
 - **Preset:** `fast`
 - **Resolution:** 1080×1920 (vertical, matches Instagram Reels / TikTok)
 - **Frame rate:** 30 fps (configurable)
-- **Audio:** None (silent video)
+- **Audio:** AAC 128 kbps (when enabled); silent by default
 
 ---
 
@@ -426,6 +554,13 @@ reel_20260403_120000_a1b2c3d4_manifest.json
 ```powershell
 dotnet test tests\AppRadar.Tests
 ```
+
+The test suite covers:
+- `ReelPlannerTests` — narrative engine, scoring heuristics, tag diversity, determinism
+- `SelectionServiceTests` — legacy selection logic
+- `VideoComposerTests` — FFmpeg discovery and cycle calculation
+- `MetadataValidatorTests` — validation rules
+- `ManifestWriterTests` — manifest serialisation
 
 ---
 
@@ -445,6 +580,12 @@ Then restart your terminal. Or set the path explicitly in `input\config.json`:
 ```json
 "tools": { "ffmpegPath": "C:\\ffmpeg\\bin\\ffmpeg.exe" }
 ```
+
+### `TTS not available on this platform`
+
+`SystemSpeechTtsProvider` requires Windows.  If you see this warning on a non-Windows machine,
+audio is automatically skipped and a silent video is produced.  On Windows this should not occur
+under normal circumstances.
 
 ### `At least 3 enabled featured apps are required`
 
@@ -466,11 +607,11 @@ If you see this error, verify the font family name in `input\config.json`:
 
 ### `FFmpeg failed with exit code N`
 
-Run with debug-level logging by setting the environment variable:
+Run with debug-level logging:
 
 ```powershell
 $env:DOTNET_LOGGING__CONSOLE__LOGLEVEL__DEFAULT = "Debug"
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24
+dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 ```
 
 The full FFmpeg command and stderr output will be included in the logs.

@@ -22,5 +22,19 @@
   "tools": {
     "ffmpegPath": null,
     "ffprobePath": null
+  },
+  "audio": {
+    "enabled": false,
+    "ttsProvider": "SystemSpeech",
+    "voiceName": null,
+    "rate": 0,
+    "volume": 100,
+    "leadInMs": 150,
+    "gapBetweenSlidesMs": 300,
+    "normalizeAudio": true
+  },
+  "strategy": {
+    "mode": "StructuredMarketing",
+    "allowLegacyShuffleMode": true
   }
 }

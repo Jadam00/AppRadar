@@ -9,10 +9,12 @@ public enum TransitionStyle
 public sealed class SlideSelection
 {
     public int Slot { get; set; }
+    public SlideRole Role { get; set; }
     public AppSourceType SourceType { get; set; }
     public string AppName { get; set; } = string.Empty;
     public string ImageName { get; set; } = string.Empty;
     public string SelectedCaption { get; set; } = string.Empty;
+    public string NarrationText { get; set; } = string.Empty;
     public string SourcePath { get; set; } = string.Empty;
     public string RenderedSlidePath { get; set; } = string.Empty;
 }
