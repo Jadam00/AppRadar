@@ -125,12 +125,16 @@ public sealed class SingleAppPipelineTests
         const string narration = "First sentence. Second sentence. Third sentence.";
         var plan = NarrationPlanner.Build(narration, 5000, 800, 4000, false, null);
 
-        // Every chunk text must be a substring of the full narration
+        // Must have at least one non-empty chunk
+        Assert.True(plan.DisplayChunks.Any(c => !string.IsNullOrWhiteSpace(c.Text)),
+            "At least one display chunk must contain non-empty text");
+
+        // Every chunk text must be a substring of the full narration (or empty)
         foreach (var chunk in plan.DisplayChunks)
         {
+            if (string.IsNullOrWhiteSpace(chunk.Text)) continue;
             Assert.True(
-                narration.Contains(chunk.Text, StringComparison.OrdinalIgnoreCase)
-                    || string.IsNullOrWhiteSpace(chunk.Text),
+                narration.Contains(chunk.Text, StringComparison.OrdinalIgnoreCase),
                 $"Chunk '{chunk.Text}' is not derived from the narration text");
         }
     }

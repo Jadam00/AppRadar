@@ -355,7 +355,11 @@ public sealed class GenerationService
 
         try
         {
-            var rewritten = provider.RewriteAsync(draft).GetAwaiter().GetResult();
+            // Run the async rewrite on the thread-pool to avoid potential deadlocks when
+            // this synchronous method is called from a non-async call chain.
+            // In this Windows console app there is no SynchronizationContext, so
+            // Task.Run is still the safest pattern here.
+            var rewritten = Task.Run(() => provider.RewriteAsync(draft)).GetAwaiter().GetResult();
             return (rewritten, true, provider.ProviderName, false);
         }
         catch (CaptionRewriteException ex)

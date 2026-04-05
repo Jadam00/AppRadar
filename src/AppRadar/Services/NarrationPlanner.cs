@@ -117,6 +117,8 @@ public static class NarrationPlanner
     /// <summary>
     /// Maps display chunks to time windows proportional to word count.
     /// The last chunk's window runs to (audioDurationMs + tailHoldMs).
+    /// Rounding errors are absorbed by the last chunk to ensure total duration
+    /// is exactly (audioDurationMs + tailHoldMs).
     /// </summary>
     internal static List<DisplayChunk> BuildRevealTimeline(
         IReadOnlyList<string> chunks,
@@ -136,11 +138,20 @@ public static class NarrationPlanner
         for (int i = 0; i < chunks.Count; i++)
         {
             bool isLast = i == chunks.Count - 1;
-            int chunkMs = isLast
-                ? totalMs - cursor
-                : (int)Math.Round((double)wordCounts[i] / totalWords * audioDurationMs);
+            int chunkMs;
+            if (isLast)
+            {
+                // Absorb all rounding error in the last chunk so the timeline sums exactly to totalMs.
+                chunkMs = Math.Max(1, totalMs - cursor);
+            }
+            else
+            {
+                chunkMs = Math.Max(1, (int)Math.Round((double)wordCounts[i] / totalWords * audioDurationMs));
+                // Clamp so intermediate chunks don't consume the full budget (leave at least 1ms for remaining).
+                int remainingChunks = chunks.Count - i - 1;
+                chunkMs = Math.Min(chunkMs, totalMs - cursor - remainingChunks);
+            }
 
-            chunkMs = Math.Max(chunkMs, 1);
             result.Add(new DisplayChunk
             {
                 Text = chunks[i],

@@ -32,13 +32,15 @@ public static class WavDurationReader
 
             int sampleRate = 0;
             int byteRate = 0;
-            long dataSizeBytes = 0;
+            uint dataSizeBytes = 0;
 
             // Walk chunks until we find "fmt " and "data"
             while (fs.Position < fs.Length - 8)
             {
                 var chunkId = new string(br.ReadChars(4));
-                int chunkSize = br.ReadInt32();
+                // Read chunk size as uint to handle large data chunks correctly.
+                uint chunkSizeU = br.ReadUInt32();
+                int chunkSize = (chunkSizeU > int.MaxValue) ? int.MaxValue : (int)chunkSizeU;
 
                 if (chunkId == "fmt ")
                 {
@@ -56,13 +58,14 @@ public static class WavDurationReader
                 }
                 else if (chunkId == "data")
                 {
-                    dataSizeBytes = (uint)chunkSize; // treat as unsigned to handle large files
+                    dataSizeBytes = chunkSizeU;
                     break;
                 }
                 else
                 {
-                    // Skip unknown chunk
-                    fs.Seek(chunkSize, SeekOrigin.Current);
+                    // Skip unknown chunk (add padding byte if size is odd, per RIFF spec)
+                    long skipBytes = chunkSize + (chunkSize % 2);
+                    fs.Seek(skipBytes, SeekOrigin.Current);
                 }
             }
 

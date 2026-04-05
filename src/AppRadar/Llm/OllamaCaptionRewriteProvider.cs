@@ -29,6 +29,12 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
         "Do not use emojis. " +
         "Return plain text only.";
 
+    /// <summary>
+    /// Maximum number of non-empty lines accepted in an Ollama response before it is
+    /// treated as bullet-point output (and the first line is taken instead).
+    /// </summary>
+    private const int MaxAcceptableResponseLines = 4;
+
     private readonly OllamaConfig _config;
     private readonly HttpClient _http;
     private readonly ILogger<OllamaCaptionRewriteProvider> _logger;
@@ -103,7 +109,7 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
         var lines = responseText
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        if (lines.Length > 4)
+        if (lines.Length > MaxAcceptableResponseLines)
         {
             _logger.LogWarning(
                 "Ollama returned {Lines} lines — looks like bullet points. Falling back to first line.",
@@ -141,7 +147,20 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
 
     private static bool ContainsEmoji(string text)
     {
-        return text.Any(c => c > 0x2600 && c < 0xE007F);
+        // Modern emoji are above U+FFFF and represented as UTF-16 surrogate pairs.
+        // High surrogates (U+D800–U+DBFF) indicate a codepoint above U+FFFF.
+        // Also check common BMP emoji/symbol ranges:
+        //   U+2600–U+27FF  Miscellaneous Symbols, Dingbats
+        //   U+2B00–U+2BFF  Miscellaneous Symbols and Arrows
+        //   U+FE00–U+FE0F  Variation Selectors (often follow emoji)
+        foreach (char c in text)
+        {
+            if (char.IsHighSurrogate(c)) return true;
+            if (c >= 0x2600 && c <= 0x27FF) return true;
+            if (c >= 0x2B00 && c <= 0x2BFF) return true;
+            if (c >= 0xFE00 && c <= 0xFE0F) return true;
+        }
+        return false;
     }
 
     private static string RemoveProhibitedContent(string text)
@@ -150,13 +169,23 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
         var words = text.Split(' ')
             .Where(w => !w.StartsWith('#'))
             .ToArray();
-        var cleaned = string.Join(' ', words);
+        var withoutHashtags = string.Join(' ', words);
 
-        // Remove high-codepoint emoji characters
-        var sb = new System.Text.StringBuilder();
-        foreach (char c in cleaned)
+        // Remove emoji characters (BMP symbols and high-surrogate sequences)
+        var sb = new System.Text.StringBuilder(withoutHashtags.Length);
+        for (int i = 0; i < withoutHashtags.Length; i++)
         {
-            if (c <= 0x2600 || c > 0xE007F) sb.Append(c);
+            char c = withoutHashtags[i];
+            if (char.IsHighSurrogate(c))
+            {
+                // Skip surrogate pair (emoji above BMP)
+                if (i + 1 < withoutHashtags.Length && char.IsLowSurrogate(withoutHashtags[i + 1]))
+                    i++;
+                continue;
+            }
+            if ((c >= 0x2600 && c <= 0x27FF) || (c >= 0x2B00 && c <= 0x2BFF) || (c >= 0xFE00 && c <= 0xFE0F))
+                continue;
+            sb.Append(c);
         }
         return sb.ToString().Trim();
     }
