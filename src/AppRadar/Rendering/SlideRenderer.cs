@@ -35,12 +35,6 @@ public sealed class SlideRenderer
 
         using var image = LoadAndCrop(slide.SourcePath, width, height);
 
-        // Draw top gradient overlay for app name readability
-        DrawTopGradient(image, width, overlay);
-
-        // Draw app name at the top of the slide
-        DrawAppName(image, slide.AppName, width, overlay);
-
         // Draw bottom gradient overlay for readability
         DrawBottomGradient(image, width, height, overlay);
 

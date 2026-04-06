@@ -56,7 +56,12 @@ public sealed class OverlayConfig
 
 public sealed class AnimationConfig
 {
-    public int VerticalDriftPixels { get; set; } = 60;
+    /// <summary>
+    /// Vertical drift in pixels for the Ken Burns-style slide animation.
+    /// Defaults to 0 (no vertical movement).  Set to a positive value in config.json
+    /// to re-enable the upward drift effect.
+    /// </summary>
+    public int VerticalDriftPixels { get; set; } = 0;
     public int TransitionDurationMs { get; set; } = 600;
 }
 
