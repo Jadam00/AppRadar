@@ -320,6 +320,16 @@ Edit `input\config.json`:
 | `lengthScale` | `1.0` | Speech speed — values below `1.0` speed up, above `1.0` slow down |
 | `noiseScale` | `0.667` | Voice variation / expressiveness |
 | `noiseW` | `0.8` | Phoneme duration variation |
+| `enablePauseMarkers` | `true` | Interpret `[[pause]]` / `[[pause=400]]` markers as pacing cues |
+| `pauseMarkerDefaultMs` | `320` | Pause duration used when marker omits a value (`[[pause]]`) |
+| `pauseMarkerMinMs` | `120` | Minimum accepted pause marker value |
+| `pauseMarkerMaxMs` | `1200` | Maximum accepted pause marker value |
+
+When `audio.ttsProvider` is `"Piper"`, the `audio.voiceName`, `audio.rate`, and
+`audio.volume` settings are ignored. Use `audio.piper.lengthScale` for pacing.
+
+Pause markers can be added in narration text when you want extra rhythm:
+`[[pause]]` (default pause) or `[[pause=450]]` (custom pause).
 
 ### 4. Generate a reel with Piper narration
 
@@ -457,6 +467,9 @@ To also generate placeholder images during setup:
 | `leadInMs` | `150` | Silence before first word of narration (ms) |
 | `gapBetweenSlidesMs` | `300` | Silence between narration segments in legacy mode (ms) |
 | `normalizeAudio` | `true` | Apply FFmpeg `loudnorm` filter to even out audio levels |
+
+For `"Piper"`, tune natural pacing with `audio.piper.lengthScale` (for example `1.0` to `1.1`).
+Use optional narration markers `[[pause]]` or `[[pause=400]]` to shape spoken rhythm.
 
 ### LLM (Ollama) configuration
 

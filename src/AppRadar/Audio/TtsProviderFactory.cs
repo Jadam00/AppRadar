@@ -16,6 +16,9 @@ public static class TtsProviderFactory
     /// </summary>
     public static ITtsProvider Create(AudioConfig config, ILoggerFactory loggerFactory)
     {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+
         var name = (config.TtsProvider ?? string.Empty).Trim();
 
         if (string.IsNullOrEmpty(name) ||
@@ -34,6 +37,8 @@ public static class TtsProviderFactory
 
         if (name.Equals("Piper", StringComparison.OrdinalIgnoreCase))
         {
+            WarnIfSystemSpeechOnlyOptionsConfiguredForPiper(config, loggerFactory);
+
             return new PiperTtsProvider(
                 config.Piper,
                 loggerFactory.CreateLogger<PiperTtsProvider>());
@@ -41,5 +46,33 @@ public static class TtsProviderFactory
 
         throw new NotSupportedException(
             $"Unknown TTS provider: '{name}'. Supported values: SystemSpeech, Piper");
+    }
+
+    private static void WarnIfSystemSpeechOnlyOptionsConfiguredForPiper(
+        AudioConfig config,
+        ILoggerFactory loggerFactory)
+    {
+        var logger = loggerFactory.CreateLogger(typeof(TtsProviderFactory));
+
+        if (!string.IsNullOrWhiteSpace(config.VoiceName))
+        {
+            logger.LogWarning(
+                "audio.voiceName is ignored when ttsProvider is Piper. " +
+                "Set ttsProvider to SystemSpeech to use a SAPI voice name.");
+        }
+
+        if (config.Rate != 0)
+        {
+            logger.LogWarning(
+                "audio.rate is ignored when ttsProvider is Piper. " +
+                "Use audio.piper.lengthScale to tune speech pace.");
+        }
+
+        if (config.Volume != 100)
+        {
+            logger.LogWarning(
+                "audio.volume is ignored when ttsProvider is Piper. " +
+                "Use normalizeAudio and post-processing for loudness control.");
+        }
     }
 }

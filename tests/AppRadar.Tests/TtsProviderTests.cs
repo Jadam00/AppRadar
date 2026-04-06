@@ -1,5 +1,6 @@
 using AppRadar.Audio;
 using AppRadar.Config;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -9,6 +10,39 @@ namespace AppRadar.Tests;
 
 public sealed class TtsProviderFactoryTests
 {
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<string> WarningMessages { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(WarningMessages);
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(List<string> warningMessages) : ILogger
+        {
+            private readonly List<string> _warningMessages = warningMessages;
+
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel == LogLevel.Warning)
+                    _warningMessages.Add(formatter(state, exception));
+            }
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
+    }
+
     [Fact]
     public void Create_WithPiperProvider_ReturnsPiperTtsProvider()
     {
@@ -23,6 +57,51 @@ public sealed class TtsProviderFactoryTests
         var config = new AudioConfig { TtsProvider = "piper" };
         var provider = TtsProviderFactory.Create(config, NullLoggerFactory.Instance);
         Assert.IsType<PiperTtsProvider>(provider);
+    }
+
+    [Fact]
+    public void Create_WithPiperAndSystemSpeechOnlyOptions_LogsWarnings()
+    {
+        var loggerProvider = new CapturingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(b => b.AddProvider(loggerProvider));
+
+        var config = new AudioConfig
+        {
+            TtsProvider = "Piper",
+            VoiceName = "Microsoft Zira Desktop",
+            Rate = -3,
+            Volume = 80
+        };
+
+        var provider = TtsProviderFactory.Create(config, loggerFactory);
+
+        Assert.IsType<PiperTtsProvider>(provider);
+        Assert.Contains(loggerProvider.WarningMessages,
+            m => m.Contains("audio.voiceName is ignored", StringComparison.Ordinal));
+        Assert.Contains(loggerProvider.WarningMessages,
+            m => m.Contains("audio.rate is ignored", StringComparison.Ordinal));
+        Assert.Contains(loggerProvider.WarningMessages,
+            m => m.Contains("audio.volume is ignored", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Create_WithPiperAndDefaultSystemSpeechOptions_DoesNotLogWarnings()
+    {
+        var loggerProvider = new CapturingLoggerProvider();
+        using var loggerFactory = LoggerFactory.Create(b => b.AddProvider(loggerProvider));
+
+        var config = new AudioConfig
+        {
+            TtsProvider = "Piper",
+            VoiceName = null,
+            Rate = 0,
+            Volume = 100
+        };
+
+        var provider = TtsProviderFactory.Create(config, loggerFactory);
+
+        Assert.IsType<PiperTtsProvider>(provider);
+        Assert.Empty(loggerProvider.WarningMessages);
     }
 
     [Fact]
@@ -306,6 +385,40 @@ public sealed class PiperTtsProviderTests
     public void SanitiseText_NormalisesInputCorrectly(string input, string expected)
     {
         Assert.Equal(expected, PiperTtsProvider.SanitiseText(input));
+    }
+
+    [Theory]
+    [InlineData("Hello [[pause]] world", "Hello. world")]
+    [InlineData("Hello [[pause=150]] world", "Hello, world")]
+    [InlineData("Hello [[pause=750]] world", "Hello... world")]
+    [InlineData("Hello [[pause=1500]] world", "Hello.... world")]
+    [InlineData("Hello [[pause=30]] world", "Hello, world")]
+    public void ExpandPauseMarkers_MapsPauseDurationsToPacingPunctuation(string input, string expected)
+    {
+        var result = PiperTtsProvider.ExpandPauseMarkers(
+            input,
+            defaultPauseMs: 320,
+            minPauseMs: 120,
+            maxPauseMs: 1200);
+
+        Assert.Equal(expected, PiperTtsProvider.SanitiseText(result));
+    }
+
+    [Fact]
+    public void SanitiseTextForSynthesis_WhenPauseMarkersDisabled_DoesNotExpandMarkers()
+    {
+        var config = new PiperConfig
+        {
+            ExePath = "piper.exe",
+            ModelPath = "model.onnx",
+            EnablePauseMarkers = false
+        };
+
+        var provider = new PiperTtsProvider(config, Logger, MockRunner(0));
+
+        var result = provider.SanitiseTextForSynthesis("Hook [[pause=400]] CTA");
+
+        Assert.Equal("Hook [[pause=400]] CTA", result);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────────

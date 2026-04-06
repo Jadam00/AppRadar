@@ -104,6 +104,29 @@ public sealed class PiperConfig
     /// Controls phoneme duration variation. Default 0.8.
     /// </summary>
     public double NoiseW { get; set; } = 0.8;
+
+    /// <summary>
+    /// When true, supports pause markers in narration text such as
+    /// <c>[[pause]]</c> or <c>[[pause=400]]</c>.
+    /// Markers are converted to punctuation-based pacing cues before synthesis.
+    /// </summary>
+    public bool EnablePauseMarkers { get; set; } = true;
+
+    /// <summary>
+    /// Default pause duration (ms) used when a marker omits an explicit value,
+    /// for example <c>[[pause]]</c>. Default 320 ms.
+    /// </summary>
+    public int PauseMarkerDefaultMs { get; set; } = 320;
+
+    /// <summary>
+    /// Minimum allowed pause duration (ms) for marker values. Default 120 ms.
+    /// </summary>
+    public int PauseMarkerMinMs { get; set; } = 120;
+
+    /// <summary>
+    /// Maximum allowed pause duration (ms) for marker values. Default 1200 ms.
+    /// </summary>
+    public int PauseMarkerMaxMs { get; set; } = 1200;
 }
 
 /// <summary>

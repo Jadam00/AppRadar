@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using AppRadar.Config;
 using Microsoft.Extensions.Logging;
 
@@ -22,6 +23,8 @@ public sealed class PiperTtsProvider : ITtsProvider
 
     /// <summary>Seconds to wait for a single Piper process before killing it.</summary>
     internal const int DefaultTimeoutSeconds = 30;
+    private static readonly Regex PauseMarkerRegex =
+        new(@"\[\[\s*pause(?:\s*=\s*(\d{1,5}))?\s*\]\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private const double MinimumSegmentDurationSeconds = 0.5;
 
@@ -148,7 +151,7 @@ public sealed class PiperTtsProvider : ITtsProvider
         {
             var segment = segments[i];
             var segPath = Path.Combine(tempDir, $"seg_{i:D2}.wav");
-            var safeText = SanitiseText(segment.Text);
+            var safeText = SanitiseTextForSynthesis(segment.Text);
             ValidateText(safeText);
             var args = BuildArguments(segPath);
 
@@ -218,6 +221,57 @@ public sealed class PiperTtsProvider : ITtsProvider
 
         // Collapse multiple spaces and trim
         return string.Join(" ", text.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    /// <summary>
+    /// Expands optional pause markers and then normalises whitespace for synthesis.
+    /// Supported markers:
+    /// <c>[[pause]]</c> and <c>[[pause=400]]</c> (milliseconds).
+    /// </summary>
+    internal string SanitiseTextForSynthesis(string text)
+    {
+        if (!_config.EnablePauseMarkers)
+            return SanitiseText(text);
+
+        var expanded = ExpandPauseMarkers(
+            text,
+            _config.PauseMarkerDefaultMs,
+            _config.PauseMarkerMinMs,
+            _config.PauseMarkerMaxMs);
+
+        return SanitiseText(expanded);
+    }
+
+    internal static string ExpandPauseMarkers(
+        string text,
+        int defaultPauseMs,
+        int minPauseMs,
+        int maxPauseMs)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        if (minPauseMs <= 0)
+            minPauseMs = 1;
+        if (maxPauseMs < minPauseMs)
+            maxPauseMs = minPauseMs;
+
+        defaultPauseMs = Math.Clamp(defaultPauseMs, minPauseMs, maxPauseMs);
+
+        return PauseMarkerRegex.Replace(text, m =>
+        {
+            var requestedMs = defaultPauseMs;
+            if (m.Groups[1].Success && int.TryParse(m.Groups[1].Value, out var parsed))
+                requestedMs = Math.Clamp(parsed, minPauseMs, maxPauseMs);
+
+            return requestedMs switch
+            {
+                <= 220 => ", ",
+                <= 500 => ". ",
+                <= 900 => "... ",
+                _ => ".... "
+            };
+        });
     }
 
     // ── Concatenation via FFmpeg ──────────────────────────────────────────────────────────────
