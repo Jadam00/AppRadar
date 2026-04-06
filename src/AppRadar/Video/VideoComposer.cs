@@ -412,17 +412,34 @@ public sealed class VideoComposer
         TransitionStyle transition)
     {
         var sb = new System.Text.StringBuilder();
-        int scaledHeight = height + driftPixels * 2;
 
-        for (int i = 0; i < totalSlides; i++)
+        if (driftPixels > 0)
         {
-            sb.AppendLine(
-                $"[{i}:v]" +
-                $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
-                $"crop={width}:{scaledHeight}," +
-                $"crop={width}:{height}:0:'min(t/{secondsPerSlide}*{driftPixels},{driftPixels})'," +
-                $"setpts=PTS-STARTPTS" +
-                $"[v{i}];");
+            // Vertical drift: scale to extra height then animate a vertical crop upward.
+            int scaledHeight = height + driftPixels * 2;
+            for (int i = 0; i < totalSlides; i++)
+            {
+                sb.AppendLine(
+                    $"[{i}:v]" +
+                    $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
+                    $"crop={width}:{scaledHeight}," +
+                    $"crop={width}:{height}:0:'min(t/{secondsPerSlide}*{driftPixels},{driftPixels})'," +
+                    $"setpts=PTS-STARTPTS" +
+                    $"[v{i}];");
+            }
+        }
+        else
+        {
+            // No vertical motion: simple cover-fit scale and center crop.
+            for (int i = 0; i < totalSlides; i++)
+            {
+                sb.AppendLine(
+                    $"[{i}:v]" +
+                    $"scale={width}:{height}:force_original_aspect_ratio=increase," +
+                    $"crop={width}:{height}," +
+                    $"setpts=PTS-STARTPTS" +
+                    $"[v{i}];");
+            }
         }
 
         if (totalSlides == 1)
@@ -475,23 +492,38 @@ public sealed class VideoComposer
         IReadOnlyList<double> displayDurSec)
     {
         var sb = new System.Text.StringBuilder();
-        int scaledHeight = height + driftPixels * 2;
         double transitionSec = transitionMs / 1000.0;
 
-        for (int i = 0; i < totalSlides; i++)
+        if (driftPixels > 0)
         {
-            // The drift animation plays over the full input duration (display + transition
-            // overlap for non-last slides), so motion is proportional and never jerky.
-            bool isLast = i == totalSlides - 1;
-            double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
+            // Vertical drift: scale to extra height then animate a vertical crop upward.
+            int scaledHeight = height + driftPixels * 2;
+            for (int i = 0; i < totalSlides; i++)
+            {
+                bool isLast = i == totalSlides - 1;
+                double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
 
-            sb.AppendLine(
-                $"[{i}:v]" +
-                $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
-                $"crop={width}:{scaledHeight}," +
-                $"crop={width}:{height}:0:'min(t/{inputSec:F3}*{driftPixels},{driftPixels})'," +
-                $"setpts=PTS-STARTPTS" +
-                $"[v{i}];");
+                sb.AppendLine(
+                    $"[{i}:v]" +
+                    $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
+                    $"crop={width}:{scaledHeight}," +
+                    $"crop={width}:{height}:0:'min(t/{inputSec:F3}*{driftPixels},{driftPixels})'," +
+                    $"setpts=PTS-STARTPTS" +
+                    $"[v{i}];");
+            }
+        }
+        else
+        {
+            // No vertical motion: simple cover-fit scale and center crop.
+            for (int i = 0; i < totalSlides; i++)
+            {
+                sb.AppendLine(
+                    $"[{i}:v]" +
+                    $"scale={width}:{height}:force_original_aspect_ratio=increase," +
+                    $"crop={width}:{height}," +
+                    $"setpts=PTS-STARTPTS" +
+                    $"[v{i}];");
+            }
         }
 
         if (totalSlides == 1)

@@ -214,12 +214,16 @@ public sealed class GenerationService
 
         // ── Structured mode ───────────────────────────────────────────────────────────────────
         _logger.LogInformation("Using structured single-app marketing strategy");
+        AppEntry? selectedAppEntry = null;
         {
             var plan = _reelPlanner.Plan(
                 featuredSources, myAppSources, rng, config.Video.SecondsPerSlide);
             transition = plan.Transition; // always TransitionStyle.Slide
             strategyMode = "StructuredMarketing";
             storyDraft = plan.StoryDraft;
+
+            // Capture the selected app entry for keyword caption generation
+            selectedAppEntry = plan.Slides.Count > 0 ? plan.Slides[0].Source.Entry : null;
 
             // ── LLM rewrite ───────────────────────────────────────────────────────────────────
             if (storyDraft is not null)
@@ -239,7 +243,7 @@ public sealed class GenerationService
             }
 
             // Build 4-role story slides for the manifest (captures the narrative context).
-            // These are NOT used as render inputs in structured mode — chunk slides are rendered below.
+            // SelectedCaption is set to the keyword caption for each stage.
             slides = plan.Slides.Select((p, idx) => new SlideSelection
             {
                 Slot = idx + 1,
@@ -247,7 +251,7 @@ public sealed class GenerationService
                 SourceType = p.Source.SourceType,
                 AppName = p.Source.Entry.AppName,
                 ImageName = p.Source.Entry.ImageName,
-                SelectedCaption = p.DisplayCaption,
+                SelectedCaption = KeywordCaptionProvider.GetCaptionForStage(p.Role, p.Source.Entry),
                 NarrationText = narrationPlan?.FullNarrationText ?? p.NarrationText,
                 SourcePath = p.Source.ImagePath
             }).ToList();
@@ -294,10 +298,8 @@ public sealed class GenerationService
             finalStructuredDurationSeconds = (int)Math.Ceiling(finalStructuredDurationMs / 1000.0);
         }
 
-        // ── Reveal timeline ───────────────────────────────────────────────────────────────────
-        // Use the real audio duration for proportional chunk allocation.
-        // When no audio, distribute proportionally across the full visual duration (minus tail hold).
-        List<DisplayChunk> revealChunks = [];
+        // ── Reveal timeline (manifest reference only) ─────────────────────────────────────────
+        // Still built and stored in the manifest for reference; NOT used to drive slide rendering.
         if (narrationPlan is not null)
         {
             narrationPlan.ExpectedAudioDurationMs = structuredAudioDurationMs;
@@ -305,18 +307,17 @@ public sealed class GenerationService
             int effectiveAudioMs = ResolveEffectiveAudioMs(
                 structuredAudioDurationMs, finalStructuredDurationMs, config.CaptionSync.TailHoldMs);
 
-            revealChunks = NarrationPlanner.BuildRevealTimeline(
+            var revealChunks = NarrationPlanner.BuildRevealTimeline(
                 NarrationPlanner.SplitIntoChunks(narrationPlan.FullNarrationText),
                 effectiveAudioMs,
                 config.CaptionSync.TailHoldMs);
             narrationPlan.DisplayChunks = revealChunks;
         }
 
-        // ── Render chunk slides ───────────────────────────────────────────────────────────────
-        // One PNG per narration chunk — same source image, caption text = exact narration chunk.
-        // This ensures on-screen captions and spoken text are always in sync.
-        _logger.LogInformation("Rendering {Count} narration-chunk slides...",
-            revealChunks.Count > 0 ? revealChunks.Count : slides.Count);
+        // ── Render 4 keyword-caption slides ───────────────────────────────────────────────────
+        // One PNG per narrative stage — keyword caption (1–3 words), equal time per slide.
+        // Narration audio plays over all 4 slides unchanged.
+        _logger.LogInformation("Rendering 4 keyword-caption slides...");
 
         var structuredSlidePaths = new List<string>();
         string sourceImagePath = slides.Count > 0 ? slides[0].SourcePath : string.Empty;
@@ -324,40 +325,42 @@ public sealed class GenerationService
         string imageName = storyDraft?.ImageName ?? (slides.Count > 0 ? slides[0].ImageName : string.Empty);
         AppSourceType sourceType = slides.Count > 0 ? slides[0].SourceType : AppSourceType.MyApp;
 
-        if (revealChunks.Count > 0)
+        // Divide total duration equally across the 4 stages; absorb remainder in the last slide.
+        int msPerSlide = finalStructuredDurationMs / 4;
+        var keywordDurationsMs = new List<int>
         {
-            for (int i = 0; i < revealChunks.Count; i++)
-            {
-                var chunkSlide = new SlideSelection
-                {
-                    Slot = i + 1,
-                    AppName = appName,
-                    ImageName = imageName,
-                    SelectedCaption = revealChunks[i].Text,
-                    SourcePath = sourceImagePath,
-                    SourceType = sourceType
-                };
-                var path = _slideRenderer.RenderSlide(chunkSlide, outputImagesDir, config, generationId);
-                chunkSlide.RenderedSlidePath = path;
-                structuredSlidePaths.Add(path);
-            }
-        }
-        else
+            msPerSlide,
+            msPerSlide,
+            msPerSlide,
+            finalStructuredDurationMs - 3 * msPerSlide
+        };
+
+        var stageRoles = new[] { SlideRole.Hook, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta };
+        for (int i = 0; i < 4; i++)
         {
-            // Fallback: render the 4 story slides when there are no narration chunks
-            foreach (var slide in slides)
+            var role = stageRoles[i];
+            var keyword = selectedAppEntry is not null
+                ? KeywordCaptionProvider.GetCaptionForStage(role, selectedAppEntry)
+                : KeywordCaptionProvider.GetFallbackCaption(role, appName);
+
+            var keywordSlide = new SlideSelection
             {
-                var path = _slideRenderer.RenderSlide(slide, outputImagesDir, config, generationId);
-                slide.RenderedSlidePath = path;
-                structuredSlidePaths.Add(path);
-            }
+                Slot = i + 1,
+                Role = role,
+                AppName = appName,
+                ImageName = imageName,
+                SelectedCaption = keyword,
+                SourcePath = sourceImagePath,
+                SourceType = sourceType
+            };
+            var path = _slideRenderer.RenderSlide(keywordSlide, outputImagesDir, config, generationId);
+            keywordSlide.RenderedSlidePath = path;
+            structuredSlidePaths.Add(path);
         }
 
         // ── Compose video ─────────────────────────────────────────────────────────────────────
-        // Pass per-chunk durations so the composer gives each slide exactly its audio window.
-        IReadOnlyList<int>? chunkDurationsMs = revealChunks.Count == structuredSlidePaths.Count
-            ? revealChunks.Select(c => c.DurationMs).ToList()
-            : null;
+        // Pass per-stage durations so the composer gives each slide exactly its allotted window.
+        IReadOnlyList<int> chunkDurationsMs = keywordDurationsMs;
 
         _logger.LogInformation("Composing video...");
         var structuredVideoPath = _videoComposer.ComposeVideo(

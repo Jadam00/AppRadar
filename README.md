@@ -2,8 +2,8 @@
 
 A .NET 10 CLI tool that generates short vertical marketing reels from local app images and metadata.
 Produces H.264 MP4 videos built around a **single app**, following a 4-stage marketing narrative
-with optional LLM-rewritten narration, Windows TTS audio, progressive caption sync, and subtle
-drift animation — ready for Instagram Reels or TikTok-style uploads.
+with optional LLM-rewritten narration, Windows TTS audio, and horizontal slide transitions —
+ready for Instagram Reels or TikTok-style uploads.
 
 > **Windows Only** — AppRadar is designed and tested for **Windows 11 / Windows Server**.
 > Linux and macOS are not supported.
@@ -12,15 +12,38 @@ drift animation — ready for Instagram Reels or TikTok-style uploads.
 
 ## What's New
 
+### Keyword Caption System + No Vertical Motion (v5)
+
+The StructuredMarketing pipeline now produces cleaner, punchier reels:
+
+- **Keyword captions only** — each slide shows a **1–3 word caption** (e.g. "Too slow", "Manual work", "Smart automation", "Try MyApp") instead of long narration sentences.
+- **No vertical motion** — slides no longer drift upward. All motion is horizontal only.
+- **Horizontal slide transitions only** — slides transition with a `slideleft` xfade. No crossfade, no vertical movement.
+- **Bottom-only text** — app name is no longer shown at the top of slides. All text is bottom-aligned.
+- **4 slides per reel** — one slide per narrative stage, each visible for an equal share of the total duration.
+- **Narration audio unchanged** — TTS narration still plays in full over the 4 keyword slides.
+- **Narration-driven total duration** — the reel's total length is still determined by the measured WAV duration.
+
+#### Keyword caption priority (per stage)
+
+| Priority | Source |
+|---|---|
+| 1 | Explicit keyword fields in metadata (`hookKeywords`, `painKeywords`, `credibilityKeywords`, `ctaKeywords`) |
+| 2 | Tag-derived short phrase (first tag + role prefix, e.g. "Smart productivity") |
+| 3 | Deterministic fallback: "Too slow" / "Wasting time" / "Better way" / app name |
+
+#### Example keywords per stage
+
+| Stage | Example |
+|---|---|
+| Hook | "Too slow" |
+| Pain Point | "Manual work" |
+| Credibility | "Smart automation" |
+| CTA | "Try MyApp" |
+
 ### Reel Renderer Refinements (v4)
 
-The StructuredMarketing pipeline now produces cleaner, better-synced reels:
-
-- **Horizontal scroll transitions** — slides move leftward (`slideleft` xfade) between every caption chunk.
-- **Captions sourced from final narration** — on-screen text is always derived from the exact narration paragraph used for speech (LLM-rewritten or deterministic fallback). Raw stage texts are never shown once narration exists.
 - **Shadow-free overlay defaults** — gradient overlay (`BottomGradientOpacity`) and text shadow (`TextShadow`) both default to **off**. Re-enable in `input/config.json` if your images need contrast boosting.
-- **Narration-length-driven timing** — each visual slide lasts exactly as long as its audio chunk (proportional to word count × measured WAV duration). No fixed per-slide timer in structured mode.
-- **One slide per narration chunk** — the renderer generates one PNG per caption chunk, not one per role, so every chunk gets its own dedicated visual state during composition.
 
 ### Single-App Reel Engine (v3)
 
@@ -533,6 +556,10 @@ all four pools for the single-app reel.
       "captions": [
         "Generic fallback caption"
       ],
+      "hookKeywords": "Too slow",
+      "painKeywords": "Manual work",
+      "credibilityKeywords": "Smart automation",
+      "ctaKeywords": "Try MyApp",
       "hookCaptions": [
         "Hard hook line — stop the scroll",
         "Bold opening claim"
@@ -555,6 +582,15 @@ all four pools for the single-app reel.
   ]
 }
 ```
+
+**Keyword fields** (`hookKeywords`, `painKeywords`, `credibilityKeywords`, `ctaKeywords`) are
+short 1–3 word phrases shown as on-screen captions per slide. When present they take highest
+priority. When absent the system falls back to a tag-derived phrase, then a deterministic
+per-role default.
+
+**Role-specific caption fields** (`hookCaptions`, `painPointCaptions`, etc.) drive the
+narration story-draft and are used to build the TTS narration paragraph.  They are not shown
+directly on screen in StructuredMarketing mode.
 
 **Role-specific caption fields are optional.**  
 When a role-specific list is absent or empty, the planner falls back to the generic
@@ -678,12 +714,11 @@ Each reel promotes **one app** using a deliberate 4-stage narrative:
 1. **SELECT** — Pick exactly 1 app entry from `myApps` (one image). Multiple entries for the same app with different screenshots are all eligible; one is selected per reel.
 2. **DRAFT** — Build a `ReelStoryDraft` with 4 stage texts from that app's caption pools (hook → pain → cred → CTA). Stage texts come from role-specific caption lists first, then generic captions, then built-in templates.
 3. **REWRITE** *(optional, requires Ollama)* — A local LLM rewrites the 4 stage texts into one short spoken paragraph.
-4. **SPLIT** — The narration paragraph is split into display chunks at sentence/phrase boundaries.
-5. **RENDER** — 4 slide images are generated from the **same base image**, each showing one caption chunk.
-6. **TTS** *(optional)* — The full narration paragraph is synthesised to a WAV file.
-7. **MEASURE** — The actual WAV duration is read from the file header.
-8. **TIMELINE** — Chunk display timings are derived from the real audio duration (proportional to word count).
-9. **COMPOSE** — FFmpeg composes the final MP4. Duration = audio duration + tail hold (not a fixed preset).
+4. **KEYWORDS** — A 1–3 word keyword caption is resolved for each stage (explicit field → tag-derived → deterministic fallback).
+5. **TTS** *(optional)* — The full narration paragraph is synthesised to a WAV file.
+6. **MEASURE** — The actual WAV duration is read from the file header.
+7. **RENDER** — 4 slide images are generated from the **same base image**, each showing its keyword caption (bottom-aligned, no top overlay).
+8. **COMPOSE** — FFmpeg composes the final MP4 with `slideleft` transitions. Total duration = audio duration + tail hold (not a fixed preset). Each of the 4 slides occupies an equal share of the total duration.
 
 ### How narration length drives reel duration
 
@@ -691,13 +726,14 @@ Each reel promotes **one app** using a deliberate 4-stage narrative:
 - After TTS generation, the actual WAV duration is measured (no estimates).
 - Final video duration = max(audio duration + `captionSync.tailHoldMs`, `captionSync.minVisualDurationMs`).
 - `--duration` sets a fallback minimum, not a hard cap.
+- Total duration is divided equally across the 4 keyword slides.
 
-### Progressive caption sync
+### Keyword captions
 
-- The narration paragraph is split at sentence/punctuation boundaries into display chunks.
-- Each chunk is displayed for a time window proportional to its word count relative to total words.
-- No chunk extends beyond (audio duration + tail hold).
-- The on-screen text and the narration audio come from **exactly the same text source**.
+- Each slide shows a **1–3 word caption** — never a full sentence.
+- Captions are resolved independently of the narration text (audio and on-screen text are decoupled).
+- Priority: explicit `hookKeywords`/`painKeywords`/`credibilityKeywords`/`ctaKeywords` → tag-derived phrase → deterministic fallback.
+- The narration paragraph is still built and spoken in full; its text is recorded in the manifest.
 
 ### Legacy mode
 
