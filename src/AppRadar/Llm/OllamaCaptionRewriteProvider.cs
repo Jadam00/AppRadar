@@ -22,12 +22,14 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
         "You are a direct-response mobile app marketing copywriter. " +
         "Rewrite four short marketing stages into one short spoken paragraph for a vertical social media reel. " +
         "Keep the same order of ideas: hook, pain point, credibility, CTA. " +
-        "Be concise, natural, punchy, and easy to narrate. " +
+        "Be natural, punchy, and easy to narrate. " +
+        "Form a single cohesive story that flows well when spoken aloud. " +
         "Do not invent claims. " +
         "Do not use bullet points. " +
         "Do not use hashtags. " +
         "Do not use emojis. " +
-        "Return plain text only.";
+        "Start with 'Ever wondered...'. " +
+        "Return plain text only. Provide for emphasis and pauses between sentences, but do not use special markup for them.";
 
     /// <summary>
     /// Maximum number of non-empty lines accepted in an Ollama response before it is
