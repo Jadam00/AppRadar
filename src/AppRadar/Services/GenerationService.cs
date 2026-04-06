@@ -327,12 +327,13 @@ public sealed class GenerationService
 
         // Divide total duration equally across the 4 stages; absorb remainder in the last slide.
         int msPerSlide = finalStructuredDurationMs / 4;
+        int remainderMs = finalStructuredDurationMs - (msPerSlide * 3);
         var keywordDurationsMs = new List<int>
         {
             msPerSlide,
             msPerSlide,
             msPerSlide,
-            finalStructuredDurationMs - 3 * msPerSlide
+            remainderMs
         };
 
         var stageRoles = new[] { SlideRole.Hook, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta };

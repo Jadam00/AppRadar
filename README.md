@@ -41,18 +41,14 @@ The StructuredMarketing pipeline now produces cleaner, punchier reels:
 | Credibility | "Smart automation" |
 | CTA | "Try MyApp" |
 
-### Reel Renderer Refinements (v4)
+### Earlier Refinements (v4 / v3)
+
+Still active from previous versions:
 
 - **Shadow-free overlay defaults** — gradient overlay (`BottomGradientOpacity`) and text shadow (`TextShadow`) both default to **off**. Re-enable in `input/config.json` if your images need contrast boosting.
-
-### Single-App Reel Engine (v3)
-
-Each reel is a **one-app mini-advert**:
-
 - **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
 - **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
-- **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph.
-- **Progressive caption sync** — on-screen text reveals in chunks that match the narration audio timing.
+- **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph used for TTS audio.
 - **Narration-driven duration** — the reel lasts as long as the narration, not a fixed preset.
 
 | Stage | Role | Purpose |
