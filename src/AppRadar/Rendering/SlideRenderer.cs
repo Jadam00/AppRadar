@@ -33,13 +33,14 @@ public sealed class SlideRenderer
         var height = config.Video.Height;
         var overlay = config.Overlay;
 
-        using var image = LoadAndCrop(slide.SourcePath, width, height);
+        var fit = LoadAndFit(slide.SourcePath, width, height);
+        using var image = fit.Canvas;
 
         // Draw bottom gradient overlay for readability
         DrawBottomGradient(image, width, height, overlay);
 
         // Draw caption text
-        DrawCaption(image, slide.SelectedCaption, width, height, overlay);
+        DrawCaption(image, slide.SelectedCaption, overlay, fit.ContentBounds);
 
         image.SaveAsPng(outputPath);
 
@@ -47,28 +48,30 @@ public sealed class SlideRenderer
         return outputPath;
     }
 
-    private static Image<Rgba32> LoadAndCrop(string imagePath, int width, int height)
+    private static (Image<Rgba32> Canvas, Rectangle ContentBounds) LoadAndFit(
+        string imagePath,
+        int width,
+        int height)
     {
         using var original = Image.Load<Rgba32>(imagePath);
 
-        // Cover fit: scale to fill the target canvas, then center-crop
+        // Contain fit: scale to fit within the target canvas, then center on a solid background.
         float scaleX = (float)width / original.Width;
         float scaleY = (float)height / original.Height;
-        float scale = Math.Max(scaleX, scaleY);
+        float scale = Math.Min(scaleX, scaleY);
 
         int scaledW = (int)Math.Ceiling(original.Width * scale);
         int scaledH = (int)Math.Ceiling(original.Height * scale);
 
-        original.Mutate(ctx =>
-        {
-            ctx.Resize(scaledW, scaledH);
-            int cropX = (scaledW - width) / 2;
-            int cropY = (scaledH - height) / 2;
-            ctx.Crop(new Rectangle(cropX, cropY, width, height));
-        });
+        original.Mutate(ctx => ctx.Resize(scaledW, scaledH));
 
-        // Return a copy (original will be disposed)
-        return original.Clone(_ => { });
+        var canvas = new Image<Rgba32>(width, height, Color.Black);
+        int offsetX = (width - scaledW) / 2;
+        int offsetY = (height - scaledH) / 2;
+
+        canvas.Mutate(ctx => ctx.DrawImage(original, new Point(offsetX, offsetY), 1f));
+        var contentBounds = new Rectangle(offsetX, offsetY, scaledW, scaledH);
+        return (canvas, contentBounds);
     }
 
     private static void DrawBottomGradient(Image<Rgba32> image, int width, int height, OverlayConfig overlay)
@@ -145,20 +148,32 @@ public sealed class SlideRenderer
         });
     }
 
-    private static void DrawCaption(Image<Rgba32> image, string caption, int width, int height, OverlayConfig overlay)
+    private static void DrawCaption(
+        Image<Rgba32> image,
+        string caption,
+        OverlayConfig overlay,
+        Rectangle contentBounds)
     {
         var fontColor = ParseHexColor(overlay.FontColor);
         var font = ResolveFont(overlay.FontFamily, overlay.FontSize);
 
-        float maxTextWidth = width * overlay.MaxTextWidthPercent;
+        float maxTextWidth = contentBounds.Width * overlay.MaxTextWidthPercent;
         float padding = overlay.Padding;
+        float liftFactor = MathF.Max(overlay.CaptionLiftFactor, 0f);
+        float captionLift = MathF.Max(padding * liftFactor, 18f);
+        float captionBaselineY = contentBounds.Bottom - padding - captionLift;
+        float minBaselineY = contentBounds.Top + padding;
+        if (captionBaselineY < minBaselineY)
+            captionBaselineY = minBaselineY;
+
+        float captionCenterX = contentBounds.Left + contentBounds.Width / 2f;
 
         var textOptions = new RichTextOptions(font)
         {
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
             WrappingLength = maxTextWidth,
-            Origin = new System.Numerics.Vector2(width / 2f, height - padding)
+            Origin = new System.Numerics.Vector2(captionCenterX, captionBaselineY)
         };
 
         image.Mutate(ctx =>
@@ -171,7 +186,7 @@ public sealed class SlideRenderer
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Bottom,
                     WrappingLength = maxTextWidth,
-                    Origin = new System.Numerics.Vector2(width / 2f + 3, height - padding + 3)
+                    Origin = new System.Numerics.Vector2(captionCenterX + 3, captionBaselineY + 3)
                 };
                 ctx.DrawText(shadowOptions, caption, Color.FromRgba(0, 0, 0, 160));
             }

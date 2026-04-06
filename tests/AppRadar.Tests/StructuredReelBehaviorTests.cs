@@ -246,7 +246,7 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 2.0, 3.0, 2.5 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 3, fps: 30, durationSeconds: 8,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         Assert.Contains("slideleft", script, StringComparison.Ordinal);
@@ -260,7 +260,7 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 5.0 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 1, fps: 30, durationSeconds: 5,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         Assert.Contains("trim=duration=5", script, StringComparison.Ordinal);
@@ -274,7 +274,7 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 2.0, 3.0, 2.0, 1.5 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 4, fps: 30, durationSeconds: 9,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         for (int i = 0; i < 4; i++)
@@ -288,7 +288,7 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 3.0, 3.0, 3.0 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 3, fps: 30, durationSeconds: 9,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         // Parse offsets from xfade lines: offset=X.XXX
@@ -312,7 +312,7 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 2.0, 3.0, 2.0 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 3, fps: 30, durationSeconds: 7,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         var offsets = System.Text.RegularExpressions.Regex
@@ -331,9 +331,25 @@ public sealed class StructuredReelBehaviorTests
         var durations = new List<double> { 2.0, 3.0 };
         var script = VideoComposer.BuildFilterGraphChunked(
             totalSlides: 2, fps: 30, durationSeconds: 5,
-            width: 1080, height: 1920, driftPixels: 60,
+            width: 1080, height: 1920,
             transitionMs: 600, displayDurSec: durations);
 
         Assert.Contains("[outv]", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildFilterGraphChunked_DoesNotContainVerticalDriftExpression()
+    {
+        var durations = new List<double> { 2.0, 3.0, 2.0 };
+        var script = VideoComposer.BuildFilterGraphChunked(
+            totalSlides: 3, fps: 30, durationSeconds: 7,
+            width: 1080, height: 1920,
+            transitionMs: 600, displayDurSec: durations);
+
+        Assert.DoesNotContain("min(t/", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("crop=1080:1920", script, StringComparison.Ordinal);
+        Assert.Contains("force_original_aspect_ratio=decrease", script, StringComparison.Ordinal);
+        Assert.Contains("pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black", script, StringComparison.Ordinal);
+    }
+
 }

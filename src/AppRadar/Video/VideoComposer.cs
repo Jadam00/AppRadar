@@ -250,7 +250,6 @@ public sealed class VideoComposer
         int fps = config.Video.Fps;
         int width = config.Video.Width;
         int height = config.Video.Height;
-        int driftPixels = config.Animation.VerticalDriftPixels;
         int transitionMs = config.Animation.TransitionDurationMs;
 
         string filterScript;
@@ -279,7 +278,7 @@ public sealed class VideoComposer
 
             filterScript = BuildFilterGraphChunked(
                 slidePaths.Count, fps, durationSeconds,
-                width, height, driftPixels, transitionMs, displayDurSec);
+                width, height, transitionMs, displayDurSec);
         }
         else
         {
@@ -298,7 +297,7 @@ public sealed class VideoComposer
 
             filterScript = BuildFilterGraph(
                 totalSlides, fps, secondsPerSlide, durationSeconds,
-                width, height, driftPixels, transitionMs, transition);
+                width, height, transitionMs, transition);
         }
 
         var filterFile = Path.GetTempFileName();
@@ -407,39 +406,20 @@ public sealed class VideoComposer
         int durationSeconds,
         int width,
         int height,
-        int driftPixels,
         int transitionMs,
         TransitionStyle transition)
     {
         var sb = new System.Text.StringBuilder();
 
-        if (driftPixels > 0)
+        // No vertical motion: contain-fit and center-pad so the full image stays visible.
+        for (int i = 0; i < totalSlides; i++)
         {
-            // Vertical drift: scale to extra height then animate a vertical crop upward.
-            int scaledHeight = height + driftPixels * 2;
-            for (int i = 0; i < totalSlides; i++)
-            {
-                sb.AppendLine(
-                    $"[{i}:v]" +
-                    $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
-                    $"crop={width}:{scaledHeight}," +
-                    $"crop={width}:{height}:0:'min(t/{secondsPerSlide}*{driftPixels},{driftPixels})'," +
-                    $"setpts=PTS-STARTPTS" +
-                    $"[v{i}];");
-            }
-        }
-        else
-        {
-            // No vertical motion: simple cover-fit scale and center crop.
-            for (int i = 0; i < totalSlides; i++)
-            {
-                sb.AppendLine(
-                    $"[{i}:v]" +
-                    $"scale={width}:{height}:force_original_aspect_ratio=increase," +
-                    $"crop={width}:{height}," +
-                    $"setpts=PTS-STARTPTS" +
-                    $"[v{i}];");
-            }
+            sb.AppendLine(
+                $"[{i}:v]" +
+            $"scale={width}:{height}:force_original_aspect_ratio=decrease," +
+            $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black," +
+                $"setpts=PTS-STARTPTS" +
+                $"[v{i}];");
         }
 
         if (totalSlides == 1)
@@ -487,43 +467,21 @@ public sealed class VideoComposer
         int durationSeconds,
         int width,
         int height,
-        int driftPixels,
         int transitionMs,
         IReadOnlyList<double> displayDurSec)
     {
         var sb = new System.Text.StringBuilder();
         double transitionSec = transitionMs / 1000.0;
 
-        if (driftPixels > 0)
+        // No vertical motion: contain-fit and center-pad so the full image stays visible.
+        for (int i = 0; i < totalSlides; i++)
         {
-            // Vertical drift: scale to extra height then animate a vertical crop upward.
-            int scaledHeight = height + driftPixels * 2;
-            for (int i = 0; i < totalSlides; i++)
-            {
-                bool isLast = i == totalSlides - 1;
-                double inputSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
-
-                sb.AppendLine(
-                    $"[{i}:v]" +
-                    $"scale={width}:{scaledHeight}:force_original_aspect_ratio=increase," +
-                    $"crop={width}:{scaledHeight}," +
-                    $"crop={width}:{height}:0:'min(t/{inputSec:F3}*{driftPixels},{driftPixels})'," +
-                    $"setpts=PTS-STARTPTS" +
-                    $"[v{i}];");
-            }
-        }
-        else
-        {
-            // No vertical motion: simple cover-fit scale and center crop.
-            for (int i = 0; i < totalSlides; i++)
-            {
-                sb.AppendLine(
-                    $"[{i}:v]" +
-                    $"scale={width}:{height}:force_original_aspect_ratio=increase," +
-                    $"crop={width}:{height}," +
-                    $"setpts=PTS-STARTPTS" +
-                    $"[v{i}];");
-            }
+            sb.AppendLine(
+                $"[{i}:v]" +
+            $"scale={width}:{height}:force_original_aspect_ratio=decrease," +
+            $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black," +
+                $"setpts=PTS-STARTPTS" +
+                $"[v{i}];");
         }
 
         if (totalSlides == 1)

@@ -15,6 +15,7 @@ public sealed class SlideSelection
     public string ImageName { get; set; } = string.Empty;
     public string SelectedCaption { get; set; } = string.Empty;
     public string NarrationText { get; set; } = string.Empty;
+    public string? OverlayCaptionSource { get; set; }
     public string SourcePath { get; set; } = string.Empty;
     public string RenderedSlidePath { get; set; } = string.Empty;
 }

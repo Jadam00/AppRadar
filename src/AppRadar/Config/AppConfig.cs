@@ -52,16 +52,18 @@ public sealed class OverlayConfig
     /// Set to true in config.json to re-enable.
     /// </summary>
     public bool TextShadow { get; set; } = false;
+
+    /// <summary>
+    /// Multiplier applied to <see cref="Padding"/> to lift the caption upward from the
+    /// bottom edge of the fitted image area.
+    /// Higher values place captions higher on the image.
+    /// Default 0.7.
+    /// </summary>
+    public float CaptionLiftFactor { get; set; } = 0.7f;
 }
 
 public sealed class AnimationConfig
 {
-    /// <summary>
-    /// Vertical drift in pixels for the Ken Burns-style slide animation.
-    /// Defaults to 0 (no vertical movement).  Set to a positive value in config.json
-    /// to re-enable the upward drift effect.
-    /// </summary>
-    public int VerticalDriftPixels { get; set; } = 0;
     public int TransitionDurationMs { get; set; } = 600;
 }
 

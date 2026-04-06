@@ -150,6 +150,8 @@ public sealed class GenerationService
         ReelNarrationPlan? narrationPlan = null;
         bool llmFallbackUsed = false;
         string? llmModelUsed = null;
+        bool usedLlmSlideCaptions = false;
+        string? slideCaptionModelUsed = null;
 
         bool useLegacy = config.Strategy.Mode.Equals("Legacy", StringComparison.OrdinalIgnoreCase);
 
@@ -251,8 +253,9 @@ public sealed class GenerationService
                 SourceType = p.Source.SourceType,
                 AppName = p.Source.Entry.AppName,
                 ImageName = p.Source.Entry.ImageName,
-                SelectedCaption = KeywordCaptionProvider.GetCaptionForStage(p.Role, p.Source.Entry),
+                SelectedCaption = p.DisplayCaption,
                 NarrationText = narrationPlan?.FullNarrationText ?? p.NarrationText,
+                OverlayCaptionSource = "story-draft",
                 SourcePath = p.Source.ImagePath
             }).ToList();
         }
@@ -337,12 +340,52 @@ public sealed class GenerationService
         };
 
         var stageRoles = new[] { SlideRole.Hook, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta };
+        var stageCaptionProvider = CaptionRewriteProviderFactory.CreateStageCaptionProvider(config.Llm, _loggerFactory);
         for (int i = 0; i < 4; i++)
         {
             var role = stageRoles[i];
-            var keyword = selectedAppEntry is not null
+            var fallbackCaption = selectedAppEntry is not null
                 ? KeywordCaptionProvider.GetCaptionForStage(role, selectedAppEntry)
                 : KeywordCaptionProvider.GetFallbackCaption(role, appName);
+
+            var overlayCaption = fallbackCaption;
+            var captionSource = "fallback-keyword";
+
+            if (stageCaptionProvider is not null && storyDraft is not null)
+            {
+                try
+                {
+                    var llmCaption = Task.Run(
+                        () => stageCaptionProvider.GenerateCaptionAsync(role, storyDraft)).GetAwaiter().GetResult();
+                    if (!string.IsNullOrWhiteSpace(llmCaption))
+                    {
+                        overlayCaption = llmCaption;
+                        captionSource = "llm-short-caption";
+                        usedLlmSlideCaptions = true;
+                        slideCaptionModelUsed ??= stageCaptionProvider.ProviderName;
+                    }
+                }
+                catch (CaptionRewriteException ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Slide caption LLM failed for {Stage}; using fallback caption.",
+                        role);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Unexpected slide caption error for {Stage}; using fallback caption.",
+                        role);
+                }
+            }
+
+            if (slides.Count > i)
+            {
+                slides[i].SelectedCaption = overlayCaption;
+                slides[i].OverlayCaptionSource = captionSource;
+            }
 
             var keywordSlide = new SlideSelection
             {
@@ -350,7 +393,8 @@ public sealed class GenerationService
                 Role = role,
                 AppName = appName,
                 ImageName = imageName,
-                SelectedCaption = keyword,
+                SelectedCaption = overlayCaption,
+                OverlayCaptionSource = captionSource,
                 SourcePath = sourceImagePath,
                 SourceType = sourceType
             };
@@ -397,6 +441,8 @@ public sealed class GenerationService
             // Narration / LLM fields
             NarrationText = narrationPlan?.FullNarrationText,
             LlmModelUsed = llmModelUsed,
+            SlideCaptionModelUsed = slideCaptionModelUsed,
+            UsedLlmSlideCaptions = usedLlmSlideCaptions,
             TtsProvider = config.Audio.Enabled ? config.Audio.TtsProvider : null,
             AudioDurationMs = structuredAudioDurationMs,
             FinalVideoDurationMs = finalStructuredDurationMs,

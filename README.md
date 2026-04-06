@@ -394,10 +394,10 @@ To also generate placeholder images during setup:
     "padding": 64,
     "maxTextWidthPercent": 0.82,
     "bottomGradientOpacity": 0.0,
-    "textShadow": false
+    "textShadow": false,
+    "captionLiftFactor": 0.7
   },
   "animation": {
-    "verticalDriftPixels": 60,
     "transitionDurationMs": 600
   },
   "tools": {

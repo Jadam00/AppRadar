@@ -34,4 +34,25 @@ public static class CaptionRewriteProviderFactory
             .LogWarning("Unknown LLM provider '{Provider}'; falling back to deterministic join.", config.Provider);
         return new DeterministicCaptionJoiner();
     }
+
+    /// <summary>
+    /// Creates the configured per-stage short caption provider.
+    /// Returns null when LLM is disabled or provider is unknown.
+    /// </summary>
+    public static IStageCaptionProvider? CreateStageCaptionProvider(LlmConfig config, ILoggerFactory loggerFactory)
+    {
+        if (!config.Enabled)
+            return null;
+
+        if (config.Provider.Equals("Ollama", StringComparison.OrdinalIgnoreCase))
+        {
+            var http = new HttpClient();
+            var logger = loggerFactory.CreateLogger<OllamaStageCaptionProvider>();
+            return new OllamaStageCaptionProvider(config.Ollama, http, logger);
+        }
+
+        loggerFactory.CreateLogger(nameof(CaptionRewriteProviderFactory))
+            .LogWarning("Unknown LLM provider '{Provider}'; stage captions will use fallback keywords.", config.Provider);
+        return null;
+    }
 }

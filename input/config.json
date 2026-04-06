@@ -13,10 +13,10 @@
     "padding": 64,
     "maxTextWidthPercent": 0.82,
     "bottomGradientOpacity": 0.55,
-    "textShadow": true
+    "textShadow": true,
+    "captionLiftFactor": 1.2
   },
   "animation": {
-    "verticalDriftPixels": 60,
     "transitionDurationMs": 600
   },
   "tools": {

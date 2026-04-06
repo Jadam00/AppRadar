@@ -39,6 +39,12 @@ public sealed class ReelManifest
     /// <summary>LLM model used for rewrite, or null when fallback was used.</summary>
     public string? LlmModelUsed { get; set; }
 
+    /// <summary>LLM model/provider used for per-slide short overlay captions.</summary>
+    public string? SlideCaptionModelUsed { get; set; }
+
+    /// <summary>True when at least one slide overlay caption used LLM output.</summary>
+    public bool UsedLlmSlideCaptions { get; set; }
+
     /// <summary>TTS provider used for audio generation.</summary>
     public string? TtsProvider { get; set; }
 
