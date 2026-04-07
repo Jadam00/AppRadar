@@ -23,10 +23,10 @@ public sealed class SingleAppPipelineTests
                 ImageName = image,
                 Captions = ["Generic caption"],
                 Tags = ["logic", "puzzle"],
-                HookCaptions = ["Stop scrolling and try this!"],
-                PainPointCaptions = ["Most puzzle apps get boring fast"],
-                CredibilityCaptions = ["Genuinely gets harder as you improve"],
-                CtaCaptions = ["Download now and prove it"]
+                HookCaptions = ["Stop scrolling and try this!", "Pause and look at this puzzle challenge"],
+                PainPointCaptions = ["Most puzzle apps get boring fast", "You solve a few levels and then it is all the same"],
+                CredibilityCaptions = ["Genuinely gets harder as you improve", "Each win unlocks harder logic patterns"],
+                CtaCaptions = ["Download now and prove it", "Install it now and test your brain"]
             },
             SourceType = AppSourceType.MyApp,
             ImagePath = $"/fake/{image}"
@@ -72,10 +72,10 @@ public sealed class SingleAppPipelineTests
         var plan = planner.Plan([], new List<AppSource> { app }, new Random(1));
 
         // The stage texts should come from the role-specific caption pools
-        Assert.Equal("Stop scrolling and try this!",       plan.StoryDraft!.HookText);
-        Assert.Equal("Most puzzle apps get boring fast",    plan.StoryDraft.PainPointText);
-        Assert.Equal("Genuinely gets harder as you improve", plan.StoryDraft.CredibilityText);
-        Assert.Equal("Download now and prove it",           plan.StoryDraft.CtaText);
+        Assert.Contains(plan.StoryDraft!.HookText, app.Entry.HookCaptions!);
+        Assert.Contains(plan.StoryDraft.PainPointText, app.Entry.PainPointCaptions!);
+        Assert.Contains(plan.StoryDraft.CredibilityText, app.Entry.CredibilityCaptions!);
+        Assert.Contains(plan.StoryDraft.CtaText, app.Entry.CtaCaptions!);
     }
 
     [Fact]

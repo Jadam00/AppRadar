@@ -189,17 +189,16 @@ public sealed class ReelPlanner
         var roleSpecific = GetStageContent(source.Entry, role).Captions;
         if (roleSpecific is { Count: > 0 })
         {
-            var rsRanked = roleSpecific
+            var candidates = roleSpecific
                 .Where(c => !string.IsNullOrWhiteSpace(c))
-                .Select(c => (text: c, score: ScoreCaption(c, role, usedTexts)))
-                .OrderByDescending(x => x.score)
+                .Where(c => !usedTexts.Contains(c))
                 .ToList();
 
-            var bestRs = rsRanked.FirstOrDefault(x => !usedTexts.Contains(x.text)).text;
-            if (bestRs is not null)
+            if (candidates.Count > 0)
             {
-                usedTexts.Add(bestRs);
-                return bestRs;
+                var selected = candidates[rng.Next(candidates.Count)];
+                usedTexts.Add(selected);
+                return selected;
             }
         }
 

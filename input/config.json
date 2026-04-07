@@ -34,7 +34,7 @@
     "normalizeAudio": true,
     "piper": {
       "exePath": "C:\\Program Files\\piper\\piper.exe",
-      "modelPath": "C:\\Program Files\\piper\\models\\en_US-libritts-high.onnx",
+      "modelPath": "C:\\Program Files\\piper\\models\\en_US-ryan-high.onnx",
       "speaker": null,
       "lengthScale": 1.05,
       "noiseScale": 0.667,

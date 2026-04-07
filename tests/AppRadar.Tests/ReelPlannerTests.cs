@@ -278,6 +278,43 @@ public sealed class ReelPlannerTests
     }
 
     [Fact]
+    public void Plan_RoleSpecificCaptions_VaryAcrossSeeds_WhenPoolHasMultipleOptions()
+    {
+        var planner = CreatePlanner();
+
+        var richApp = CreateRichMyAppSource(
+            "MyPowApp",
+            hookCaptions: ["HOOK option A", "HOOK option B", "HOOK option C"],
+            painCaptions: ["PAIN option A", "PAIN option B", "PAIN option C"],
+            credCaptions: ["CRED option A", "CRED option B", "CRED option C"],
+            ctaCaptions: ["CTA option A", "CTA option B", "CTA option C"]);
+
+        var featured = CreateFeaturedSources(3);
+        var myApps = new List<AppSource> { richApp };
+
+        var seenHook = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenPain = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int seed = 0; seed < 40; seed++)
+        {
+            var plan = planner.Plan(featured, myApps, new Random(seed));
+
+            Assert.Contains(plan.Slides[0].DisplayCaption, richApp.Entry.HookCaptions!);
+            Assert.Contains(plan.Slides[1].DisplayCaption, richApp.Entry.PainPointCaptions!);
+            Assert.Contains(plan.Slides[2].DisplayCaption, richApp.Entry.CredibilityCaptions!);
+            Assert.Contains(plan.Slides[3].DisplayCaption, richApp.Entry.CtaCaptions!);
+
+            seenHook.Add(plan.Slides[0].DisplayCaption);
+            seenPain.Add(plan.Slides[1].DisplayCaption);
+        }
+
+        Assert.True(seenHook.Count > 1,
+            $"Expected hook caption variation across seeds, saw {seenHook.Count} unique value(s).");
+        Assert.True(seenPain.Count > 1,
+            $"Expected pain caption variation across seeds, saw {seenPain.Count} unique value(s).");
+    }
+
+    [Fact]
     public void Plan_FallsBackToGenericCaptionsWhenRoleSpecificAbsent()
     {
         var planner = CreatePlanner();
