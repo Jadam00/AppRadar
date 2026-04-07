@@ -16,7 +16,7 @@ ready for Instagram Reels or TikTok-style uploads.
 
 The StructuredMarketing pipeline now produces cleaner, punchier reels:
 
-- **Keyword captions only** — each slide shows a **1–3 word caption** (e.g. "Too slow", "Manual work", "Smart automation", "Try MyApp") instead of long narration sentences.
+- **Keyword captions per slide** — each slide shows a short caption instead of long narration sentences. When `llm.enabled` is `true`, Ollama generates a **4–8 word** overlay caption per stage; otherwise the caption is resolved deterministically as a **1–3 word** phrase (e.g. "Too slow", "Manual work", "Smart automation", "Try MyApp").
 - **No vertical motion** — slides no longer drift upward. All motion is horizontal only.
 - **Horizontal slide transitions only** — slides transition with a `slideleft` xfade. No crossfade, no vertical movement.
 - **Bottom-only text** — app name is no longer shown at the top of slides. All text is bottom-aligned.
@@ -28,9 +28,10 @@ The StructuredMarketing pipeline now produces cleaner, punchier reels:
 
 | Priority | Source |
 |---|---|
-| 1 | Explicit keyword fields in metadata (`hookKeywords`, `painKeywords`, `credibilityKeywords`, `ctaKeywords`) |
-| 2 | Tag-derived short phrase (first tag + role prefix, e.g. "Smart productivity") |
-| 3 | Deterministic fallback: "Too slow" / "Wasting time" / "Better way" / app name |
+| 1 | **LLM-generated** (Ollama, 4–8 words) — when `llm.enabled` is `true` and the LLM call succeeds |
+| 2 | Explicit keyword fields in metadata (`hookKeywords`, `painKeywords`, `credibilityKeywords`, `ctaKeywords`) |
+| 3 | Tag-derived short phrase (first tag + role prefix, e.g. "Smart productivity") |
+| 4 | Deterministic fallback: "Too slow" / "Wasting time" / "Better way" / app name |
 
 #### Example keywords per stage
 
@@ -48,7 +49,7 @@ Still active from previous versions:
 - **Shadow-free overlay defaults** — gradient overlay (`BottomGradientOpacity`) and text shadow (`TextShadow`) both default to **off**. Re-enable in `input/config.json` if your images need contrast boosting.
 - **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
 - **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
-- **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph used for TTS audio.
+- **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph used for TTS audio. When `llm.enabled` is `true`, Ollama **also** generates a short per-stage overlay caption (4–8 words) for each slide.
 - **Narration-driven duration** — the reel lasts as long as the narration, not a fixed preset.
 
 | Stage | Role | Purpose |
@@ -173,11 +174,13 @@ AppRadar searches in this order and uses the first match:
 
 ## Ollama Setup (optional)
 
-AppRadar can optionally use a locally running [Ollama](https://ollama.com) server to rewrite the
-four raw marketing stage texts into one short, natural-sounding narration paragraph.
+AppRadar can optionally use a locally running [Ollama](https://ollama.com) server for two tasks:
 
-This step is **entirely optional**. When Ollama is disabled or unavailable, AppRadar falls back
-to a deterministic sentence join (see [Fallback Behaviour](#fallback-behaviour)).
+1. **Narration rewrite** — rewrites the four raw stage texts into one short, natural-sounding narration paragraph used for TTS audio.
+2. **Per-stage slide captions** — generates a short 4–8 word overlay caption for each of the 4 slides.
+
+Both are controlled by the same `llm.enabled` flag. This step is **entirely optional**. When Ollama is disabled or unavailable, AppRadar falls back
+to a deterministic sentence join for narration (see [Fallback Behaviour](#fallback-behaviour)) and deterministic keyword captions for slides.
 
 ### 1. Install Ollama
 
@@ -234,11 +237,12 @@ Set `llm.ollama.model` to any model you have pulled locally:
 When `llm.enabled` is `false`, Ollama is unreachable, or the request fails:
 
 1. AppRadar logs a warning.
-2. A deterministic join is used instead: `"{Hook}. {Pain}. {Credibility}. {CTA}."`
-3. Reel generation continues normally.
-4. The manifest records `"llmFallbackUsed": true`.
+2. **Narration**: A deterministic join is used instead: `"{Hook}. {Pain}. {Credibility}. {CTA}."`
+3. **Slide captions**: Each stage caption is resolved by `KeywordCaptionProvider` (explicit keyword fields → tag-derived → deterministic fallback).
+4. Reel generation continues normally.
+5. The manifest records `"llmFallbackUsed": true`.
 
-The fallback always produces valid narration, so Ollama failure never blocks reel generation.
+The fallback always produces valid narration and captions, so Ollama failure never blocks reel generation.
 
 ---
 
@@ -395,7 +399,7 @@ To also generate placeholder images during setup:
     "height": 1920,
     "fps": 30,
     "defaultDurationSeconds": 24,
-    "secondsPerSlide": 4
+    "secondsPerSlide": 3
   },
   "overlay": {
     "fontFamily": "Arial",
@@ -723,7 +727,7 @@ Each reel promotes **one app** using a deliberate 4-stage narrative:
 1. **SELECT** — Pick exactly 1 app entry from `myApps` (one image). Multiple entries for the same app with different screenshots are all eligible; one is selected per reel.
 2. **DRAFT** — Build a `ReelStoryDraft` with 4 stage texts from that app's caption pools (hook → pain → cred → CTA). Stage texts come from role-specific caption lists first, then generic captions, then built-in templates.
 3. **REWRITE** *(optional, requires Ollama)* — A local LLM rewrites the 4 stage texts into one short spoken paragraph.
-4. **KEYWORDS** — A 1–3 word keyword caption is resolved for each stage (explicit field → tag-derived → deterministic fallback).
+4. **KEYWORDS** — A short keyword caption is resolved for each stage. When `llm.enabled` is `true` and the LLM call succeeds, Ollama generates a **4–8 word** caption per stage. Otherwise `KeywordCaptionProvider` is used: explicit keyword fields → tag-derived phrase → deterministic fallback (1–3 words).
 5. **TTS** *(optional)* — The full narration paragraph is synthesised to a WAV file.
 6. **MEASURE** — The actual WAV duration is read from the file header.
 7. **RENDER** — 4 slide images are generated from the **same base image**, each showing its keyword caption (bottom-aligned, no top overlay).
@@ -739,9 +743,10 @@ Each reel promotes **one app** using a deliberate 4-stage narrative:
 
 ### Keyword captions
 
-- Each slide shows a **1–3 word caption** — never a full sentence.
+- Each slide shows a short caption — never a full sentence.
+- When `llm.enabled` is `true` and the LLM call succeeds, Ollama generates a **4–8 word** caption per stage via the stage caption provider.
+- When LLM is disabled or fails, captions fall back to `KeywordCaptionProvider`: explicit `hookKeywords`/`painKeywords`/`credibilityKeywords`/`ctaKeywords` → tag-derived phrase → deterministic fallback (1–3 words).
 - Captions are resolved independently of the narration text (audio and on-screen text are decoupled).
-- Priority: explicit `hookKeywords`/`painKeywords`/`credibilityKeywords`/`ctaKeywords` → tag-derived phrase → deterministic fallback.
 - The narration paragraph is still built and spoken in full; its text is recorded in the manifest.
 
 ### Legacy mode
@@ -785,8 +790,6 @@ Set `audio.voiceName` to use a specific SAPI voice:
 "audio": { "voiceName": "Microsoft Zira Desktop" }
 ```
 
-Run `dotnet run -- setup --list-voices` to list available Windows SAPI voices.
-
 ---
 
 ## Manifest Format
@@ -804,7 +807,9 @@ Each generated reel produces a JSON manifest in `output\manifests\`. Key fields:
 | `credibilityText` | Stage 3 raw text (pre-LLM) |
 | `ctaText` | Stage 4 raw text (pre-LLM) |
 | `narrationText` | Final narration paragraph (LLM-rewritten or deterministic fallback) |
-| `llmModelUsed` | Ollama model used, or `null` if fallback was used |
+| `llmModelUsed` | Ollama model used for narration rewrite, or `null` if fallback was used |
+| `slideCaptionModelUsed` | Ollama model/provider used for per-slide short overlay captions, or `null` |
+| `usedLlmSlideCaptions` | `true` if at least one slide overlay caption was generated by the LLM |
 | `ttsProvider` | TTS provider used for audio generation |
 | `audioDurationMs` | Measured audio duration in ms |
 | `finalVideoDurationMs` | Final video duration in ms |
