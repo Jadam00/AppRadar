@@ -29,36 +29,29 @@ public sealed class MetadataValidator
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(entry.ImageName))
+            if (string.IsNullOrWhiteSpace(entry.AppName))
             {
-                errors.Add($"Entry '{entry.AppName}' has an empty imageName");
+                errors.Add("An enabled entry has an empty appName");
                 continue;
             }
 
-            if (!seenNames.Add(entry.ImageName))
-            {
-                errors.Add($"Duplicate imageName '{entry.ImageName}' found in description.json");
-                continue;
-            }
+            var stageCandidates = new Dictionary<SlideRole, List<StageImageCandidate>>();
+            ValidateStage(entry, SlideRole.Hook, entry.Hook, imagesDir, seenNames, stageCandidates, errors);
+            ValidateStage(entry, SlideRole.PainPoint, entry.PainPoint, imagesDir, seenNames, stageCandidates, errors);
+            ValidateStage(entry, SlideRole.Credibility, entry.Credibility, imagesDir, seenNames, stageCandidates, errors);
+            ValidateStage(entry, SlideRole.Cta, entry.Cta, imagesDir, seenNames, stageCandidates, errors);
 
-            if (entry.Captions is null || entry.Captions.Count == 0)
-            {
-                errors.Add($"Entry '{entry.AppName}' (image: {entry.ImageName}) has no captions");
+            if (HasStageErrorsForEntry(errors, entry.AppName))
                 continue;
-            }
 
-            var imagePath = Path.Combine(imagesDir, entry.ImageName);
-            if (!File.Exists(imagePath))
-            {
-                errors.Add($"Image file not found: {imagePath}");
-                continue;
-            }
+            var defaultImagePath = stageCandidates[SlideRole.Hook][0].ImagePath;
 
             sources.Add(new AppSource
             {
                 Entry = entry,
                 SourceType = sourceType,
-                ImagePath = imagePath
+                ImagePath = defaultImagePath,
+                StageImageCandidates = stageCandidates
             });
         }
 
@@ -69,6 +62,71 @@ public sealed class MetadataValidator
         }
 
         return sources;
+    }
+
+    private static bool HasStageErrorsForEntry(List<string> errors, string appName) =>
+        errors.Any(e => e.Contains($"Entry '{appName}'", StringComparison.OrdinalIgnoreCase));
+
+    private static void ValidateStage(
+        AppEntry entry,
+        SlideRole role,
+        StageContent stage,
+        string imagesDir,
+        HashSet<string> seenNames,
+        Dictionary<SlideRole, List<StageImageCandidate>> stageCandidates,
+        List<string> errors)
+    {
+        var stageName = role.ToString();
+
+        if (stage.Captions is null || stage.Captions.Count == 0)
+        {
+            errors.Add($"Entry '{entry.AppName}' has no captions for stage '{stageName}'");
+            return;
+        }
+
+        if (stage.ImageNames is null || stage.ImageNames.Count == 0)
+        {
+            errors.Add($"Entry '{entry.AppName}' has no imageNames for stage '{stageName}'");
+            return;
+        }
+
+        var candidates = new List<StageImageCandidate>();
+        foreach (var imageName in stage.ImageNames)
+        {
+            if (string.IsNullOrWhiteSpace(imageName))
+            {
+                errors.Add($"Entry '{entry.AppName}' has an empty imageName in stage '{stageName}'");
+                continue;
+            }
+
+            var uniqueKey = $"{entry.AppName}:{stageName}:{imageName}";
+            if (!seenNames.Add(uniqueKey))
+            {
+                errors.Add($"Duplicate stage imageName '{imageName}' found for entry '{entry.AppName}' stage '{stageName}'");
+                continue;
+            }
+
+            var imagePath = Path.Combine(imagesDir, imageName);
+            if (!File.Exists(imagePath))
+            {
+                errors.Add($"Image file not found for entry '{entry.AppName}' stage '{stageName}': {imagePath}");
+                continue;
+            }
+
+            candidates.Add(new StageImageCandidate
+            {
+                ImageName = imageName,
+                ImagePath = imagePath
+            });
+        }
+
+        if (candidates.Count == 0)
+        {
+            errors.Add($"Entry '{entry.AppName}' stage '{stageName}' has no valid images");
+            return;
+        }
+
+        stageCandidates[role] = candidates;
     }
 
     public void ValidateFeaturedCount(List<AppSource> sources)

@@ -8,7 +8,7 @@ namespace AppRadar.Services;
 /// single selected app.
 ///
 /// Single-app mode (default):
-///   Selects exactly ONE app and ONE image. All four narrative stages
+///   Selects exactly ONE app. Each narrative stage then randomly selects one image
 ///   (Hook, PainPoint, Credibility, CTA) are drawn from that single app's caption
 ///   pools. The result is a cohesive one-app mini-advert.
 ///
@@ -24,9 +24,8 @@ namespace AppRadar.Services;
 ///   - Avoiding exact duplicate wording across slides
 ///   - Avoiding very long captions (> 90 chars penalised)
 ///
-/// When a role-specific caption list is empty or absent, the planner falls back to
-/// the generic <c>captions</c> list, then to a built-in template derived from the
-/// app's tags and name.
+/// When a role-specific stage caption list is empty or absent, the planner falls back
+/// to a built-in template derived from the app's tags and name.
 /// </summary>
 public sealed class ReelPlanner
 {
@@ -89,7 +88,7 @@ public sealed class ReelPlanner
     /// <summary>
     /// Builds a complete single-app <see cref="ReelPlan"/> for one reel.
     ///
-    /// Selects exactly ONE app and ONE image.  All four stages draw captions from
+    /// Selects exactly ONE app. All four stages draw captions from
     /// that same app.  Prefers <paramref name="myAppSources"/> (the app being promoted)
     /// and falls back to <paramref name="featuredSources"/> when myApps is empty.
     /// </summary>
@@ -110,20 +109,25 @@ public sealed class ReelPlanner
             throw new InvalidOperationException(
                 "No app sources available — cannot build a reel plan.");
 
-        // Select exactly ONE app entry (and therefore ONE image)
+        // Select exactly ONE app entry
         var selectedSource = PickUnique(candidatePool, rng);
 
         _logger.LogInformation(
-            "Single-app reel: selected '{App}' (image: {Image})",
-            selectedSource.Entry.AppName, selectedSource.Entry.ImageName);
+            "Single-app reel: selected '{App}'",
+            selectedSource.Entry.AppName);
 
         // Build 4 stage captions from the SAME app
         var usedTexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var hookCaption   = SelectCaption(selectedSource, SlideRole.Hook,         rng, usedTexts);
-        var painCaption   = SelectCaption(selectedSource, SlideRole.PainPoint,    rng, usedTexts);
-        var credCaption   = SelectCaption(selectedSource, SlideRole.Credibility,  rng, usedTexts);
-        var ctaCaption    = SelectCaption(selectedSource, SlideRole.Cta,          rng, usedTexts);
+        var hookCaption = SelectCaption(selectedSource, SlideRole.Hook, rng, usedTexts);
+        var painCaption = SelectCaption(selectedSource, SlideRole.PainPoint, rng, usedTexts);
+        var credCaption = SelectCaption(selectedSource, SlideRole.Credibility, rng, usedTexts);
+        var ctaCaption = SelectCaption(selectedSource, SlideRole.Cta, rng, usedTexts);
+
+        var hookImage = SelectStageImage(selectedSource, SlideRole.Hook, rng);
+        var painImage = SelectStageImage(selectedSource, SlideRole.PainPoint, rng);
+        var credImage = SelectStageImage(selectedSource, SlideRole.Credibility, rng);
+        var ctaImage = SelectStageImage(selectedSource, SlideRole.Cta, rng);
 
         _logger.LogInformation("Hook caption       : \"{Caption}\"", hookCaption);
         _logger.LogInformation("PainPoint caption  : \"{Caption}\"", painCaption);
@@ -133,31 +137,37 @@ public sealed class ReelPlanner
         // Build story draft (pre-LLM structured model)
         var storyDraft = new ReelStoryDraft
         {
-            AppName        = selectedSource.Entry.AppName,
-            ImageName      = selectedSource.Entry.ImageName,
-            Tags           = string.Join(", ", selectedSource.Entry.Tags),
-            HookText       = hookCaption,
-            PainPointText  = painCaption,
+            AppName = selectedSource.Entry.AppName,
+            StageImageNames = new Dictionary<string, string>
+            {
+                [SlideRole.Hook.ToString()] = hookImage.ImageName,
+                [SlideRole.PainPoint.ToString()] = painImage.ImageName,
+                [SlideRole.Credibility.ToString()] = credImage.ImageName,
+                [SlideRole.Cta.ToString()] = ctaImage.ImageName
+            },
+            Tags = string.Join(", ", selectedSource.Entry.Tags),
+            HookText = hookCaption,
+            PainPointText = painCaption,
             CredibilityText = credCaption,
-            CtaText        = ctaCaption
+            CtaText = ctaCaption
         };
 
         // Structured marketing reels always use horizontal scroll (slideleft xfade).
         var transition = TransitionStyle.Slide;
         _logger.LogInformation("Transition: {Transition}", transition);
 
-        // Assemble plan — all slides use the SAME source image
+        // Assemble plan — each stage uses its own randomly selected image from stage pool.
         return new ReelPlan
         {
-            Transition   = transition,
+            Transition = transition,
             StrategyMode = "StructuredMarketing",
-            StoryDraft   = storyDraft,
+            StoryDraft = storyDraft,
             Slides =
             [
-                MakeSlidePlan(SlideRole.Hook,        selectedSource, hookCaption,  secondsPerSlide),
-                MakeSlidePlan(SlideRole.PainPoint,   selectedSource, painCaption,  secondsPerSlide),
-                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption,  secondsPerSlide),
-                MakeSlidePlan(SlideRole.Cta,         selectedSource, ctaCaption,   secondsPerSlide),
+                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImage, secondsPerSlide),
+                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImage, secondsPerSlide),
+                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImage, secondsPerSlide),
+                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImage, secondsPerSlide),
             ]
         };
     }
@@ -166,10 +176,8 @@ public sealed class ReelPlanner
 
     /// <summary>
     /// Selects the best caption for a given role from the app's caption pools.
-    /// Priority: role-specific pool → generic captions → built-in template.
+    /// Priority: role-specific stage pool → built-in template.
     /// Within each pool, the highest-scoring caption is chosen.
-    /// Role-specific captions are always preferred over generic ones when a non-duplicate
-    /// candidate exists in the role-specific pool.
     /// </summary>
     internal string SelectCaption(
         AppSource source,
@@ -177,9 +185,8 @@ public sealed class ReelPlanner
         Random rng,
         ISet<string> usedTexts)
     {
-        // 1. Try role-specific pool first (hard priority — best caption from this pool wins
-        //    over any generic caption, regardless of score).
-        var roleSpecific = GetRoleSpecificCaptions(source.Entry, role);
+        // 1. Try role-specific stage caption pool first.
+        var roleSpecific = GetStageContent(source.Entry, role).Captions;
         if (roleSpecific is { Count: > 0 })
         {
             var rsRanked = roleSpecific
@@ -196,11 +203,8 @@ public sealed class ReelPlanner
             }
         }
 
-        // 2. Fall back to generic captions and templates scored together.
-        var fallbackPool = new List<string>();
-        if (source.Entry.Captions is { Count: > 0 })
-            fallbackPool.AddRange(source.Entry.Captions);
-        fallbackPool.Add(BuildTemplate(source.Entry, role, rng));
+        // 2. Fall back to stage template.
+        var fallbackPool = new List<string> { BuildTemplate(source.Entry, role, rng) };
 
         var ranked = fallbackPool
             .Where(c => !string.IsNullOrWhiteSpace(c))
@@ -216,15 +220,37 @@ public sealed class ReelPlanner
         return chosen;
     }
 
-    private static List<string>? GetRoleSpecificCaptions(AppEntry entry, SlideRole role) =>
+    private static StageContent GetStageContent(AppEntry entry, SlideRole role) =>
         role switch
         {
-            SlideRole.Hook => entry.HookCaptions,
-            SlideRole.PainPoint => entry.PainPointCaptions,
-            SlideRole.Credibility => entry.CredibilityCaptions,
-            SlideRole.Cta => entry.CtaCaptions,
-            _ => null
+            SlideRole.Hook => entry.Hook,
+            SlideRole.PainPoint => entry.PainPoint,
+            SlideRole.Credibility => entry.Credibility,
+            SlideRole.Cta => entry.Cta,
+            _ => new StageContent()
         };
+
+    private static StageImageCandidate SelectStageImage(AppSource source, SlideRole role, Random rng)
+    {
+        if (!source.StageImageCandidates.TryGetValue(role, out var candidates) || candidates.Count == 0)
+        {
+            var stage = GetStageContent(source.Entry, role);
+            if (stage.ImageNames.Count == 0)
+                throw new InvalidOperationException($"No stage image candidates available for role '{role}'.");
+
+            var sourceDir = Path.GetDirectoryName(source.ImagePath) ?? string.Empty;
+            candidates = stage.ImageNames
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => new StageImageCandidate
+                {
+                    ImageName = n,
+                    ImagePath = Path.Combine(sourceDir, n)
+                })
+                .ToList();
+        }
+
+        return candidates[rng.Next(candidates.Count)];
+    }
 
     private static string BuildTemplate(AppEntry entry, SlideRole role, Random rng)
     {
@@ -324,12 +350,15 @@ public sealed class ReelPlanner
         SlideRole role,
         AppSource source,
         string caption,
+        StageImageCandidate selectedImage,
         int durationSeconds)
     {
         return new ReelSlidePlan
         {
             Role = role,
             Source = source,
+            ImageName = selectedImage.ImageName,
+            SourcePath = selectedImage.ImagePath,
             DisplayCaption = caption,
             NarrationText = caption,   // default: narration mirrors the on-screen copy
             DurationSeconds = durationSeconds

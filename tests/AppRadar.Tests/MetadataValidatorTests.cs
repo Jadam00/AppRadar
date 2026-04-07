@@ -11,7 +11,7 @@ public sealed class MetadataValidatorTests
         new(NullLogger<MetadataValidator>.Instance);
 
     [Fact]
-    public void ValidateAndBuildSources_ThrowsOnDuplicateImageName()
+    public void ValidateAndBuildSources_ThrowsOnDuplicateImageNameWithinStage()
     {
         var validator = CreateValidator();
         var tmpDir = CreateTempImageDir(["image1.png"]);
@@ -20,15 +20,22 @@ public sealed class MetadataValidatorTests
         {
             Apps =
             [
-                new AppEntry { ImageName = "image1.png", AppName = "App1", Captions = ["cap1"], Enabled = true },
-                new AppEntry { ImageName = "image1.png", AppName = "App2", Captions = ["cap2"], Enabled = true }
+                new AppEntry
+                {
+                    AppName = "App1",
+                    Hook = new StageContent { ImageNames = ["image1.png", "image1.png"], Captions = ["cap1"] },
+                    PainPoint = new StageContent { ImageNames = ["image1.png"], Captions = ["cap1"] },
+                    Credibility = new StageContent { ImageNames = ["image1.png"], Captions = ["cap1"] },
+                    Cta = new StageContent { ImageNames = ["image1.png"], Captions = ["cap1"] },
+                    Enabled = true
+                }
             ]
         };
 
         var ex = Assert.Throws<ValidationException>(() =>
             validator.ValidateAndBuildSources(description, tmpDir, AppSourceType.Featured));
 
-        Assert.Contains("Duplicate imageName", ex.Message);
+        Assert.Contains("Duplicate stage imageName", ex.Message);
     }
 
     [Fact]

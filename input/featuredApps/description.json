@@ -1,132 +1,187 @@
-{
+﻿{
   "apps": [
     {
-      "imageName": "AdobeExpress.png",
       "appName": "Adobe Express",
-      "captions": [
-        "Design in minutes",
-        "Quick edits, clean results",
-        "Content creation made easy"
-      ],
-      "hookCaptions": [
-        "Still spending hours on design? Stop.",
-        "Most people overcomplicate content creation",
-        "Your designs shouldn't take all day"
-      ],
-      "painPointCaptions": [
-        "Great design tools are either too complex or too expensive",
-        "Most creators waste hours just making simple graphics",
-        "Not everyone has time to learn Photoshop"
-      ],
-      "credibilityCaptions": [
-        "Adobe Express makes pro-level design accessible",
-        "Clean results in minutes — no design degree needed",
-        "The shortcut to polished content"
-      ],
+      "hook": {
+        "imageNames": ["AdobeExpress.png"],
+        "captions": [
+          "Still spending hours on design? Stop.",
+          "Most people overcomplicate content creation",
+          "Your designs shouldn't take all day"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["AdobeExpress.png"],
+        "captions": [
+          "Great design tools are either too complex or too expensive",
+          "Most creators waste hours just making simple graphics",
+          "Not everyone has time to learn Photoshop"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["AdobeExpress.png"],
+        "captions": [
+          "Adobe Express makes pro-level design accessible",
+          "Clean results in minutes - no design degree needed",
+          "The shortcut to polished content"
+        ]
+      },
+      "cta": {
+        "imageNames": ["AdobeExpress.png"],
+        "captions": [
+          "Create with Adobe Express",
+          "Try Adobe Express now",
+          "Design faster today"
+        ]
+      },
       "tags": ["design", "creative", "editing"],
       "enabled": true
     },
     {
-      "imageName": "canva.jpg",
       "appName": "Canva",
-      "captions": [
-        "Create stunning visuals",
-        "Design for everyone",
-        "Your ideas, beautifully made"
-      ],
-      "hookCaptions": [
-        "What if anyone could design like a pro?",
-        "You don't need a designer — you need Canva",
-        "Stop settling for boring visuals"
-      ],
-      "painPointCaptions": [
-        "Blank canvas paralysis is real",
-        "Most design tools assume you already know what you're doing",
-        "Templates save hours — most people don't use them"
-      ],
-      "credibilityCaptions": [
-        "Canva: the world's most used design platform",
-        "Millions of templates, zero excuses",
-        "From idea to share-ready in under 5 minutes"
-      ],
+      "hook": {
+        "imageNames": ["canva.jpg"],
+        "captions": [
+          "What if anyone could design like a pro?",
+          "You don't need a designer - you need Canva",
+          "Stop settling for boring visuals"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["canva.jpg"],
+        "captions": [
+          "Blank canvas paralysis is real",
+          "Most design tools assume you already know what you're doing",
+          "Templates save hours - most people don't use them"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["canva.jpg"],
+        "captions": [
+          "Canva: the world's most used design platform",
+          "Millions of templates, zero excuses",
+          "From idea to share-ready in under 5 minutes"
+        ]
+      },
+      "cta": {
+        "imageNames": ["canva.jpg"],
+        "captions": [
+          "Start with Canva",
+          "Try Canva today",
+          "Design in minutes"
+        ]
+      },
       "tags": ["design", "templates", "social"],
       "enabled": true
     },
     {
-      "imageName": "figma.jpg",
       "appName": "Figma",
-      "captions": [
-        "Collaborate in real time",
-        "Design together, build faster",
-        "Where ideas become products"
-      ],
-      "hookCaptions": [
-        "Real collaboration shouldn't require a meeting",
-        "Design reviews that don't waste everyone's time",
-        "The way teams build products has changed"
-      ],
-      "painPointCaptions": [
-        "Design handoffs are a nightmare without the right tool",
-        "Version conflicts kill creative momentum",
-        "Too many tools, not enough collaboration"
-      ],
-      "credibilityCaptions": [
-        "Figma: where product teams ship faster",
-        "Design, prototype, and review — all in one place",
-        "Built for teams that move quickly"
-      ],
+      "hook": {
+        "imageNames": ["figma.jpg"],
+        "captions": [
+          "Real collaboration shouldn't require a meeting",
+          "Design reviews that don't waste everyone's time",
+          "The way teams build products has changed"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["figma.jpg"],
+        "captions": [
+          "Design handoffs are a nightmare without the right tool",
+          "Version conflicts kill creative momentum",
+          "Too many tools, not enough collaboration"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["figma.jpg"],
+        "captions": [
+          "Figma: where product teams ship faster",
+          "Design, prototype, and review - all in one place",
+          "Built for teams that move quickly"
+        ]
+      },
+      "cta": {
+        "imageNames": ["figma.jpg"],
+        "captions": [
+          "Open Figma now",
+          "Build with Figma",
+          "Collaborate and ship"
+        ]
+      },
       "tags": ["design", "prototyping", "collaboration"],
       "enabled": true
     },
     {
-      "imageName": "notion.jpg",
       "appName": "Notion",
-      "captions": [
-        "Your workspace, your rules",
-        "All your notes in one place",
-        "Think, plan, organize"
-      ],
-      "hookCaptions": [
-        "Your brain deserves a better second brain",
-        "Notes scattered everywhere? There's a better way",
-        "The productivity app people actually stick with"
-      ],
-      "painPointCaptions": [
-        "Switching between 5 different tools is killing your focus",
-        "Your notes are everywhere and nowhere at once",
-        "Most note apps don't scale with your thinking"
-      ],
-      "credibilityCaptions": [
-        "Notion replaces a dozen separate apps",
-        "One workspace for notes, tasks, wikis, and databases",
-        "The tool teams at top companies actually use"
-      ],
+      "hook": {
+        "imageNames": ["notion.jpg"],
+        "captions": [
+          "Your brain deserves a better second brain",
+          "Notes scattered everywhere? There's a better way",
+          "The productivity app people actually stick with"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["notion.jpg"],
+        "captions": [
+          "Switching between 5 different tools is killing your focus",
+          "Your notes are everywhere and nowhere at once",
+          "Most note apps don't scale with your thinking"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["notion.jpg"],
+        "captions": [
+          "Notion replaces a dozen separate apps",
+          "One workspace for notes, tasks, wikis, and databases",
+          "The tool teams at top companies actually use"
+        ]
+      },
+      "cta": {
+        "imageNames": ["notion.jpg"],
+        "captions": [
+          "Start in Notion",
+          "Try Notion today",
+          "Organize everything"
+        ]
+      },
       "tags": ["productivity", "notes", "organization"],
       "enabled": true
     },
     {
-      "imageName": "linear.png",
       "appName": "Linear",
-      "captions": [
-        "Ship faster with Linear",
-        "Built for modern teams",
-        "Issue tracking, reimagined"
-      ],
-      "hookCaptions": [
-        "Jira slowing your team down? There's a better way",
-        "Project management doesn't have to feel like work",
-        "Fast teams use fast tools"
-      ],
-      "painPointCaptions": [
-        "Issue trackers shouldn't be slower than the issues they track",
-        "Most teams spend more time managing work than doing it",
-        "Bloated tools kill shipping velocity"
-      ],
-      "credibilityCaptions": [
-        "Linear: the issue tracker built for speed",
-        "Loved by engineering teams who actually ship",
-        "Keyboard-first, opinionated, and blazing fast"
-      ],
+      "hook": {
+        "imageNames": ["linear.png"],
+        "captions": [
+          "Jira slowing your team down? There's a better way",
+          "Project management doesn't have to feel like work",
+          "Fast teams use fast tools"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["linear.png"],
+        "captions": [
+          "Issue trackers shouldn't be slower than the issues they track",
+          "Most teams spend more time managing work than doing it",
+          "Bloated tools kill shipping velocity"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["linear.png"],
+        "captions": [
+          "Linear: the issue tracker built for speed",
+          "Loved by engineering teams who actually ship",
+          "Keyboard-first, opinionated, and blazing fast"
+        ]
+      },
+      "cta": {
+        "imageNames": ["linear.png"],
+        "captions": [
+          "Try Linear now",
+          "Ship faster with Linear",
+          "Switch to Linear"
+        ]
+      },
       "tags": ["productivity", "project management", "dev tools"],
       "enabled": true
     }

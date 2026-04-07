@@ -56,8 +56,8 @@ public sealed class GenerationService
         _logger.LogInformation("Input directory   : {Dir}", inputDir);
         _logger.LogInformation("Output directory  : {Dir}", outputDir);
 
-        // Ensure output directories exist
-        EnsureOutputDirectories(outputDir);
+        // Ensure root output and shared working directories exist.
+        EnsureRootDirectories(outputDir);
 
         // Load config (must happen before FFmpeg validation so config paths are available)
         var configLoader = new ConfigLoader(
@@ -103,27 +103,48 @@ public sealed class GenerationService
         _logger.LogInformation("Validation passed: {FeaturedCount} featured, {MyAppCount} myApps",
             featuredSources.Count, myAppSources.Count);
 
-        var outputImagesDir = Path.Combine(outputDir, "images");
-        var outputVideosDir = Path.Combine(outputDir, "videos");
-        var outputManifestsDir = Path.Combine(outputDir, "manifests");
-        var outputAudioDir = Path.Combine(outputDir, "audio");
-        Directory.CreateDirectory(outputAudioDir);
-
-        // Generate each reel
-        for (int i = 1; i <= options.Count; i++)
+        if (options.Count > 1)
         {
-            _logger.LogInformation("--- Generating reel {Index}/{Total} ---", i, options.Count);
+            _logger.LogWarning(
+                "Count is ignored in per-app mode. Generating one reel per enabled myApp entry.");
+        }
 
-            int seed = options.Seed.HasValue ? options.Seed.Value + i - 1 : Random.Shared.Next();
+        var appIndex = 0;
+        foreach (var myAppSource in myAppSources)
+        {
+            appIndex++;
+            var appSlug = SlugifyForPath(myAppSource.Entry.AppName);
+            var appOutputDir = Path.Combine(outputDir, appSlug);
+            EnsureAppOutputDirectories(appOutputDir);
+
+            var outputImagesDir = Path.Combine(appOutputDir, "images");
+            var outputVideosDir = Path.Combine(appOutputDir, "videos");
+            var outputManifestsDir = Path.Combine(appOutputDir, "manifests");
+            var outputAudioDir = Path.Combine(appOutputDir, "audio");
+
+            _logger.LogInformation(
+                "--- Generating reel {Index}/{Total} for app '{AppName}' ({AppSlug}) ---",
+                appIndex,
+                myAppSources.Count,
+                myAppSource.Entry.AppName,
+                appSlug);
+
+            int seed = options.Seed.HasValue ? options.Seed.Value + appIndex - 1 : Random.Shared.Next();
             var rng = new Random(seed);
             _logger.LogInformation("Using seed: {Seed}", seed);
 
             GenerateReel(
-                rng, seed,
-                featuredSources, myAppSources,
+                rng,
+                seed,
+                featuredSources,
+                [myAppSource],
                 config,
-                outputImagesDir, outputVideosDir, outputManifestsDir, outputAudioDir,
-                options.DurationSeconds);
+                outputImagesDir,
+                outputVideosDir,
+                outputManifestsDir,
+                outputAudioDir,
+                options.DurationSeconds,
+                appSlug);
         }
 
         _logger.LogInformation("=== AppRadar Generation Complete ===");
@@ -139,7 +160,8 @@ public sealed class GenerationService
         string outputVideosDir,
         string outputManifestsDir,
         string outputAudioDir,
-        int durationSeconds)
+        int durationSeconds,
+        string outputAppSlug)
     {
         var generationId = $"reel_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
 
@@ -252,11 +274,11 @@ public sealed class GenerationService
                 Role = p.Role,
                 SourceType = p.Source.SourceType,
                 AppName = p.Source.Entry.AppName,
-                ImageName = p.Source.Entry.ImageName,
+                ImageName = p.ImageName,
                 SelectedCaption = p.DisplayCaption,
                 NarrationText = narrationPlan?.FullNarrationText ?? p.NarrationText,
                 OverlayCaptionSource = "story-draft",
-                SourcePath = p.Source.ImagePath
+                SourcePath = p.SourcePath
             }).ToList();
         }
 
@@ -323,9 +345,7 @@ public sealed class GenerationService
         _logger.LogInformation("Rendering 4 keyword-caption slides...");
 
         var structuredSlidePaths = new List<string>();
-        string sourceImagePath = slides.Count > 0 ? slides[0].SourcePath : string.Empty;
         string appName = storyDraft?.AppName ?? (slides.Count > 0 ? slides[0].AppName : string.Empty);
-        string imageName = storyDraft?.ImageName ?? (slides.Count > 0 ? slides[0].ImageName : string.Empty);
         AppSourceType sourceType = slides.Count > 0 ? slides[0].SourceType : AppSourceType.MyApp;
 
         // Divide total duration equally across the 4 stages; absorb remainder in the last slide.
@@ -392,10 +412,10 @@ public sealed class GenerationService
                 Slot = i + 1,
                 Role = role,
                 AppName = appName,
-                ImageName = imageName,
+                ImageName = slides.Count > i ? slides[i].ImageName : string.Empty,
                 SelectedCaption = overlayCaption,
                 OverlayCaptionSource = captionSource,
-                SourcePath = sourceImagePath,
+                SourcePath = slides.Count > i ? slides[i].SourcePath : string.Empty,
                 SourceType = sourceType
             };
             var path = _slideRenderer.RenderSlide(keywordSlide, outputImagesDir, config, generationId);
@@ -432,7 +452,8 @@ public sealed class GenerationService
 
             // Single-app fields
             SelectedAppName = storyDraft?.AppName,
-            SelectedImageName = storyDraft?.ImageName,
+            OutputAppSlug = outputAppSlug,
+            StageImageNames = storyDraft?.StageImageNames,
             HookText = storyDraft?.HookText,
             PainPointText = storyDraft?.PainPointText,
             CredibilityText = storyDraft?.CredibilityText,
@@ -590,14 +611,47 @@ public sealed class GenerationService
         }
     }
 
-    private static void EnsureOutputDirectories(string outputDirectory)
+    private static void EnsureRootDirectories(string outputDirectory)
+    {
+        Directory.CreateDirectory(outputDirectory);
+        Directory.CreateDirectory("temp");
+        Directory.CreateDirectory("logs");
+    }
+
+    private static void EnsureAppOutputDirectories(string outputDirectory)
     {
         Directory.CreateDirectory(Path.Combine(outputDirectory, "images"));
         Directory.CreateDirectory(Path.Combine(outputDirectory, "videos"));
         Directory.CreateDirectory(Path.Combine(outputDirectory, "manifests"));
         Directory.CreateDirectory(Path.Combine(outputDirectory, "audio"));
-        Directory.CreateDirectory("temp");
-        Directory.CreateDirectory("logs");
+    }
+
+    private static string SlugifyForPath(string appName)
+    {
+        var input = (appName ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(input))
+            return "app";
+
+        var chars = new List<char>(input.Length);
+        bool lastDash = false;
+        foreach (var ch in input)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                chars.Add(ch);
+                lastDash = false;
+                continue;
+            }
+
+            if (!lastDash)
+            {
+                chars.Add('-');
+                lastDash = true;
+            }
+        }
+
+        var slug = new string(chars.ToArray()).Trim('-');
+        return string.IsNullOrWhiteSpace(slug) ? "app" : slug;
     }
 }
 

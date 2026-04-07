@@ -64,7 +64,10 @@ public sealed class OllamaCaptionRewriteProvider : ICaptionRewriteProvider
             $"Pain point: {draft.PainPointText}\n" +
             $"Credibility: {draft.CredibilityText}\n" +
             $"CTA: {draft.CtaText}\n\n" +
-            "Rewrite these into one short paragraph suitable for narration in a vertical marketing reel.";
+            "Rewrite these into one short paragraph suitable for narration in a vertical marketing reel. " +
+            "Emphasize natural, conversational language that flows well when spoken aloud." ;
+            // "Add a comma after every period .";
+            // "Rewrite these into one short paragraph suitable for narration in a vertical marketing reel.";
 
         var requestBody = new OllamaGenerateRequest
         {

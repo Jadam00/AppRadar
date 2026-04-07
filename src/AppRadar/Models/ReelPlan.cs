@@ -35,6 +35,12 @@ public sealed class ReelSlidePlan
     /// <summary>The app source (image + metadata) to use for this slide.</summary>
     public AppSource Source { get; set; } = null!;
 
+    /// <summary>Selected image file name for this stage.</summary>
+    public string ImageName { get; set; } = string.Empty;
+
+    /// <summary>Resolved full image path for this stage.</summary>
+    public string SourcePath { get; set; } = string.Empty;
+
     /// <summary>
     /// The caption text to display visually on the slide.
     /// This may differ from <see cref="NarrationText"/> when the narration is

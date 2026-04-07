@@ -1,5 +1,7 @@
 namespace AppRadar.Models;
 
+using System.Text.Json.Serialization;
+
 public sealed class ReelManifest
 {
     public string GenerationId { get; set; } = string.Empty;
@@ -21,8 +23,30 @@ public sealed class ReelManifest
     /// <summary>The single app this reel promotes (structured mode only).</summary>
     public string? SelectedAppName { get; set; }
 
-    /// <summary>The single image used throughout the reel (structured mode only).</summary>
-    public string? SelectedImageName { get; set; }
+    /// <summary>Slugified app folder used for output paths.</summary>
+    public string? OutputAppSlug { get; set; }
+
+    /// <summary>The selected image file name for each stage (structured mode only).</summary>
+    public Dictionary<string, string>? StageImageNames { get; set; }
+
+    [JsonIgnore]
+    public string? SelectedImageName
+    {
+        get => StageImageNames is null ? null : StageImageNames.GetValueOrDefault(SlideRole.Hook.ToString());
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            StageImageNames = new Dictionary<string, string>
+            {
+                [SlideRole.Hook.ToString()] = value,
+                [SlideRole.PainPoint.ToString()] = value,
+                [SlideRole.Credibility.ToString()] = value,
+                [SlideRole.Cta.ToString()] = value
+            };
+        }
+    }
 
     // ── 4-stage pre-LLM texts ─────────────────────────────────────────────────────────────
 

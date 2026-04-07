@@ -12,9 +12,9 @@
     "fontColor": "#FFFFFF",
     "padding": 64,
     "maxTextWidthPercent": 0.82,
-    "bottomGradientOpacity": 0.55,
+    "bottomGradientOpacity": 0,
     "textShadow": true,
-    "captionLiftFactor": 1.2
+    "captionLiftFactor": 2
   },
   "animation": {
     "transitionDurationMs": 600
@@ -34,7 +34,7 @@
     "normalizeAudio": true,
     "piper": {
       "exePath": "C:\\Program Files\\piper\\piper.exe",
-      "modelPath": "C:\\Program Files\\piper\\models\\en_GB-jenny_dioco-medium.onnx",
+      "modelPath": "C:\\Program Files\\piper\\models\\en_US-libritts-high.onnx",
       "speaker": null,
       "lengthScale": 1.05,
       "noiseScale": 0.667,

@@ -57,15 +57,18 @@ public static class SetupCommand
             {
                 foreach (var app in desc.Apps.Where(a => a.Enabled))
                 {
-                    var imgPath = Path.Combine(featuredImagesDir, app.ImageName);
-                    if (!File.Exists(imgPath))
+                    foreach (var imageName in GetAllStageImageNames(app))
                     {
-                        logger.LogInformation("Generating placeholder: {Name}", app.ImageName);
-                        PlaceholderImageGenerator.Generate(imgPath, app.AppName);
-                    }
-                    else
-                    {
-                        logger.LogInformation("Image already exists: {Name}", app.ImageName);
+                        var imgPath = Path.Combine(featuredImagesDir, imageName);
+                        if (!File.Exists(imgPath))
+                        {
+                            logger.LogInformation("Generating placeholder: {Name}", imageName);
+                            PlaceholderImageGenerator.Generate(imgPath, app.AppName);
+                        }
+                        else
+                        {
+                            logger.LogInformation("Image already exists: {Name}", imageName);
+                        }
                     }
                 }
             }
@@ -80,18 +83,31 @@ public static class SetupCommand
             {
                 foreach (var app in desc.Apps.Where(a => a.Enabled))
                 {
-                    var imgPath = Path.Combine(myAppsImagesDir, app.ImageName);
-                    if (!File.Exists(imgPath))
+                    foreach (var imageName in GetAllStageImageNames(app))
                     {
-                        logger.LogInformation("Generating placeholder: {Name}", app.ImageName);
-                        PlaceholderImageGenerator.Generate(imgPath, app.AppName);
-                    }
-                    else
-                    {
-                        logger.LogInformation("Image already exists: {Name}", app.ImageName);
+                        var imgPath = Path.Combine(myAppsImagesDir, imageName);
+                        if (!File.Exists(imgPath))
+                        {
+                            logger.LogInformation("Generating placeholder: {Name}", imageName);
+                            PlaceholderImageGenerator.Generate(imgPath, app.AppName);
+                        }
+                        else
+                        {
+                            logger.LogInformation("Image already exists: {Name}", imageName);
+                        }
                     }
                 }
             }
         }
+    }
+
+    private static IEnumerable<string> GetAllStageImageNames(AppEntry app)
+    {
+        return app.Hook.ImageNames
+            .Concat(app.PainPoint.ImageNames)
+            .Concat(app.Credibility.ImageNames)
+            .Concat(app.Cta.ImageNames)
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 }

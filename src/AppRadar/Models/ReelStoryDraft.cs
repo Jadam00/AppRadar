@@ -10,8 +10,8 @@ public sealed class ReelStoryDraft
     /// <summary>Name of the app this reel is promoting.</summary>
     public string AppName { get; set; } = string.Empty;
 
-    /// <summary>Image file name selected for the whole reel.</summary>
-    public string ImageName { get; set; } = string.Empty;
+    /// <summary>Image file name selected for each stage.</summary>
+    public Dictionary<string, string> StageImageNames { get; set; } = new();
 
     /// <summary>Comma-separated tags for the selected app.</summary>
     public string Tags { get; set; } = string.Empty;

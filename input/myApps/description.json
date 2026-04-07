@@ -1,130 +1,40 @@
 {
   "apps": [
     {
-      "imageName": "Home_Light.png",
       "appName": "NeuroMaze: Numbers Block Path",
-      "captions": [
-        "Train the brain.",
-        "Pure Logic",
-        "Endlessly difficult to master"
-      ],
-      "hookCaptions": [
-        "Most puzzle games stop challenging you after level 5",
-        "Your brain wants a real workout — not another match-3",
-        "Think you're good at logic puzzles? Think again"
-      ],
-      "painPointCaptions": [
-        "Most puzzle apps get boring fast",
-        "You solve it once and there's nothing left to figure out",
-        "Too many games reward guessing, not thinking"
-      ],
-      "credibilityCaptions": [
-        "NeuroMaze generates a new challenge every time you play",
-        "Pure number logic — no luck, no shortcuts",
-        "The puzzle that genuinely gets harder as you improve"
-      ],
-      "ctaCaptions": [
-        "Think you're smart? Prove it with NeuroMaze",
-        "Download NeuroMaze and beat the level",
-        "Your next brain challenge is one tap away",
-        "Try NeuroMaze — if you dare"
-      ],
-      "tags": ["app", "logic", "puzzle"],
-      "enabled": true
-    },
-    {
-      "imageName": "Home_Dark.png",
-      "appName": "NeuroMaze: Numbers Block Path",
-      "captions": [
-        "Train the brain.",
-        "Pure Logic",
-        "Endlessly difficult to master"
-      ],
-      "hookCaptions": [
-        "Most puzzle games stop challenging you after level 5",
-        "Your brain wants a real workout — not another match-3",
-        "Think you're good at logic puzzles? Think again"
-      ],
-      "painPointCaptions": [
-        "Most puzzle apps get boring fast",
-        "You solve it once and there's nothing left to figure out",
-        "Too many games reward guessing, not thinking"
-      ],
-      "credibilityCaptions": [
-        "NeuroMaze generates a new challenge every time you play",
-        "Pure number logic — no luck, no shortcuts",
-        "The puzzle that genuinely gets harder as you improve"
-      ],
-      "ctaCaptions": [
-        "Think you're smart? Prove it with NeuroMaze",
-        "Download NeuroMaze and beat the level",
-        "Your next brain challenge is one tap away",
-        "Try NeuroMaze — if you dare"
-      ],
-      "tags": ["app", "logic", "puzzle"],
-      "enabled": true
-    },
-    {
-      "imageName": "LvlFail_Dark.png",
-      "appName": "NeuroMaze: Numbers Block Path",
-      "captions": [
-        "Train the brain.",
-        "Pure Logic",
-        "Endlessly difficult to master"
-      ],
-      "hookCaptions": [
-        "Most puzzle games stop challenging you after level 5",
-        "Your brain wants a real workout — not another match-3",
-        "Think you're good at logic puzzles? Think again"
-      ],
-      "painPointCaptions": [
-        "Most puzzle apps get boring fast",
-        "You solve it once and there's nothing left to figure out",
-        "Too many games reward guessing, not thinking"
-      ],
-      "credibilityCaptions": [
-        "NeuroMaze generates a new challenge every time you play",
-        "Pure number logic — no luck, no shortcuts",
-        "The puzzle that genuinely gets harder as you improve"
-      ],
-      "ctaCaptions": [
-        "Think you're smart? Prove it with NeuroMaze",
-        "Download NeuroMaze and beat the level",
-        "Your next brain challenge is one tap away",
-        "Try NeuroMaze — if you dare"
-      ],
-      "tags": ["app", "logic", "puzzle"],
-      "enabled": true
-    },
-    {
-      "imageName": "HardLvl_Dark.png",
-      "appName": "NeuroMaze: Numbers Block Path",
-      "captions": [
-        "Train the brain.",
-        "Pure Logic",
-        "Endlessly difficult to master"
-      ],
-      "hookCaptions": [
-        "Most puzzle games stop challenging you after level 5",
-        "Your brain wants a real workout — not another match-3",
-        "Think you're good at logic puzzles? Think again"
-      ],
-      "painPointCaptions": [
-        "Most puzzle apps get boring fast",
-        "You solve it once and there's nothing left to figure out",
-        "Too many games reward guessing, not thinking"
-      ],
-      "credibilityCaptions": [
-        "NeuroMaze generates a new challenge every time you play",
-        "Pure number logic — no luck, no shortcuts",
-        "The puzzle that genuinely gets harder as you improve"
-      ],
-      "ctaCaptions": [
-        "Think you're smart? Prove it with NeuroMaze",
-        "Download NeuroMaze and beat the level",
-        "Your next brain challenge is one tap away",
-        "Try NeuroMaze — if you dare"
-      ],
+      "hook": {
+        "imageNames": ["Home_Light.png", "Home_Dark.png"],
+        "captions": [
+          "Most puzzle games stop challenging you after level 5",
+          "Your brain wants a real workout - a real challenge that keeps evolving",
+          "Think you're good at logic puzzles?????"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["LvlFail_Dark.png", "InPlay_Light.png", "EasyLvl_Dark.png", "InPlay_Dark.png"],
+        "captions": [
+          "Most puzzle apps get boring fast",
+          "You solve it once and there's nothing left to figure out",
+          "Too many games reward guessing, not thinking"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["HardLvl_Dark.png"],
+        "captions": [
+          "NeuroMaze generates a new challenge every time you play",
+          "Pure logic. Pattern recognition. No guessing.",
+          "The puzzle that genuinely gets harder as you improve"
+        ]
+      },
+      "cta": {
+        "imageNames": ["NNCTA.png"],
+        "captions": [
+          "Prove your smart with NeuroMaze: Numbers Block Path",
+          "Download NeuroMaze: Numbers Block Path if you're not scared",
+          "Your next brain challenge is one tap away",
+          "Try NeuroMaze: Numbers Block Path now and see how far your brain can go"
+        ]
+      },
       "tags": ["app", "logic", "puzzle"],
       "enabled": true
     }

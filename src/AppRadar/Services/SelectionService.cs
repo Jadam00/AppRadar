@@ -35,7 +35,11 @@ public sealed class SelectionService
 
         var slides = allSelected.Select(source =>
         {
-            var caption = source.Entry.Captions[rng.Next(source.Entry.Captions.Count)];
+            var hookCaptions = source.Entry.Hook.Captions;
+            var caption = hookCaptions[rng.Next(hookCaptions.Count)];
+            var hookImages = source.Entry.Hook.ImageNames;
+            var imageName = hookImages[rng.Next(hookImages.Count)];
+            var imagePath = Path.Combine(Path.GetDirectoryName(source.ImagePath) ?? string.Empty, imageName);
             _logger.LogInformation("  {AppName} → caption: \"{Caption}\"",
                 source.Entry.AppName, caption);
 
@@ -43,9 +47,9 @@ public sealed class SelectionService
             {
                 AppName = source.Entry.AppName,
                 SourceType = source.SourceType,
-                ImageName = source.Entry.ImageName,
+                ImageName = imageName,
                 SelectedCaption = caption,
-                SourcePath = source.ImagePath
+                SourcePath = imagePath
             };
         }).ToList();
 

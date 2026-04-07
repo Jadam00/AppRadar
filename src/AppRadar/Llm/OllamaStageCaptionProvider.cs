@@ -46,7 +46,7 @@ public sealed class OllamaStageCaptionProvider : IStageCaptionProvider
             $"Tags: {draft.Tags}\n" +
             $"Stage: {stage}\n" +
             $"Stage source text: {stageText}\n\n" +
-            "Write one short overlay caption for this stage. 4 to 8 words only.";
+            "Write one short overlay caption for this stage. Maximum 5 words.";
 
         var requestBody = new OllamaGenerateRequest
         {
