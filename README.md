@@ -47,7 +47,7 @@ The StructuredMarketing pipeline now produces cleaner, punchier reels:
 Still active from previous versions:
 
 - **Shadow-free overlay defaults** — gradient overlay (`BottomGradientOpacity`) and text shadow (`TextShadow`) both default to **off**. Re-enable in `input/config.json` if your images need contrast boosting.
-- **One app, one image** — a single app entry and a single screenshot are selected for the whole reel.
+- **One app, per-stage images** — a single app entry is selected for the whole reel; each of the 4 narrative stages randomly picks one image from that stage's own image pool.
 - **4-stage narrative flow** — Hook → Pain Point → Credibility → CTA — all about that one app.
 - **Local LLM rewrite (optional)** — Ollama rewrites the four stage texts into one natural spoken paragraph used for TTS audio. When `llm.enabled` is `true`, Ollama **also** generates a short per-stage overlay caption (4–8 words) for each slide.
 - **Narration-driven duration** — the reel lasts as long as the narration, not a fixed preset.
@@ -93,16 +93,16 @@ cd AppRadar
 # 3. Generate placeholder images for testing (no real screenshots needed)
 dotnet run --project src\AppRadar -- setup --input input
 
-# 4. Generate a single-app reel (no audio, no LLM)
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16
+# 4. Generate reels for all enabled myApp entries (no audio, no LLM)
+dotnet run --project src\AppRadar -- generate --duration 16
 
-# 5. Generate a reel with TTS narration audio (Windows SAPI)
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+# 5. Generate reels with TTS narration audio (Windows SAPI)
+dotnet run --project src\AppRadar -- generate --with-audio true
 
-# 6. Generate a reel with LLM narration rewrite + audio
+# 6. Generate reels with LLM narration rewrite + audio
 #    (requires Ollama running locally with qwen3:8b or your chosen model)
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
-#    and set "llm": { "enabled": true } in input\config.json
+#    Set "llm": { "enabled": true } in input\config.json, then:
+dotnet run --project src\AppRadar -- generate --with-audio true
 ```
 
 ---
@@ -338,7 +338,7 @@ Pause markers can be added in narration text when you want extra rhythm:
 ### 4. Generate a reel with Piper narration
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+dotnet run --project src\AppRadar -- generate --with-audio true
 ```
 
 ### 5. Example Piper command (manual test)
@@ -533,15 +533,16 @@ AppRadar\
 │   ├── config.json                 # Optional configuration overrides
 │   ├── featuredApps\
 │   │   ├── images\                 # Featured app screenshots (.png/.jpg)
-│   │   └── description.json        # App metadata with structured caption fields
+│   │   └── description.json        # App metadata with nested stage objects
 │   └── myApps\
-│       ├── images\                 # Your app screenshots
+│       ├── images\                 # Your app screenshots (one folder, all stages)
 │       └── description.json        # Your app metadata with all 4-stage captions
 ├── output\
-│   ├── audio\                      # Generated narration WAV files
-│   ├── images\                     # Rendered slide PNGs
-│   ├── videos\                     # Generated MP4 files
-│   └── manifests\                  # JSON manifest per reel
+│   └── <app-slug>\                 # One sub-folder per enabled myApp entry
+│       ├── audio\                  # Generated narration WAV files
+│       ├── images\                 # Rendered slide PNGs
+│       ├── videos\                 # Generated MP4 files
+│       └── manifests\              # JSON manifest per reel
 ├── temp\                           # Temporary processing files
 ├── Setup.ps1                       # Windows setup and validation script
 └── AppRadar.slnx                   # Solution file
@@ -551,44 +552,54 @@ AppRadar\
 
 ## Metadata Format
 
-`myApps\description.json` — the app being promoted. All four role-specific caption pools should
-be populated for best results. The planner picks ONE entry (one image) and draws captions from
-all four pools for the single-app reel.
+`myApps\description.json` — the apps being promoted. **One reel is generated per enabled entry.** The planner selects captions and images from each entry's per-stage pools.
 
 `featuredApps\description.json` — optional reference apps. Not used in `StructuredMarketing` mode
 (the reel is built from `myApps`), but kept for `Legacy` mode compatibility.
 
 ### Recommended myApps schema
 
+Each app entry uses **nested stage objects** (`hook`, `painPoint`, `credibility`, `cta`).
+Every stage object must have at least one image in `imageNames` and at least one caption in `captions`.
+Each stage may reference different images — the planner picks one randomly per stage.
+
 ```json
 {
   "apps": [
     {
-      "imageName": "my_app_screenshot.png",
       "appName": "My App Name",
-      "captions": [
-        "Generic fallback caption"
-      ],
+      "hook": {
+        "imageNames": ["hook_screen.png"],
+        "captions": [
+          "Hard hook line — stop the scroll",
+          "Bold opening claim"
+        ]
+      },
+      "painPoint": {
+        "imageNames": ["pain_screen.png", "another_pain.png"],
+        "captions": [
+          "The problem this app solves",
+          "Why existing solutions fall short"
+        ]
+      },
+      "credibility": {
+        "imageNames": ["cred_screen.png"],
+        "captions": [
+          "Why this app is genuinely different",
+          "Evidence or contrast"
+        ]
+      },
+      "cta": {
+        "imageNames": ["cta_screen.png"],
+        "captions": [
+          "Download My App and see for yourself",
+          "Try it today"
+        ]
+      },
       "hookKeywords": "Too slow",
       "painKeywords": "Manual work",
       "credibilityKeywords": "Smart automation",
       "ctaKeywords": "Try MyApp",
-      "hookCaptions": [
-        "Hard hook line — stop the scroll",
-        "Bold opening claim"
-      ],
-      "painPointCaptions": [
-        "The problem this app solves",
-        "Why existing solutions fall short"
-      ],
-      "credibilityCaptions": [
-        "Why this app is genuinely different",
-        "Evidence or contrast"
-      ],
-      "ctaCaptions": [
-        "Download My App and see for yourself",
-        "Try it today"
-      ],
       "tags": ["productivity", "utility"],
       "enabled": true
     }
@@ -596,25 +607,19 @@ all four pools for the single-app reel.
 }
 ```
 
+**Stage objects** (`hook`, `painPoint`, `credibility`, `cta`) are the core of each entry:
+- `imageNames` — one or more image file names in the stage's `images\` folder. The planner selects one image randomly per stage, so different stages may show different screenshots.
+- `captions` — one or more caption strings used to build the narration story-draft. The planner scores and picks the best caption for each stage. These are not shown directly on screen in StructuredMarketing mode.
+
 **Keyword fields** (`hookKeywords`, `painKeywords`, `credibilityKeywords`, `ctaKeywords`) are
-short 1–3 word phrases shown as on-screen captions per slide. When present they take highest
-priority. When absent the system falls back to a tag-derived phrase, then a deterministic
-per-role default.
-
-**Role-specific caption fields** (`hookCaptions`, `painPointCaptions`, etc.) drive the
-narration story-draft and are used to build the TTS narration paragraph.  They are not shown
-directly on screen in StructuredMarketing mode.
-
-**Role-specific caption fields are optional.**  
-When a role-specific list is absent or empty, the planner falls back to the generic
-`captions` list, then to built-in templates derived from the app's tags and name.
+optional short 1–3 word phrases used as on-screen slide overlays. When present they take highest
+priority over the LLM-generated or tag-derived captions.
 
 **Validation rules:**
 - `enabled: false` items are skipped entirely
-- `imageName` must be unique within the file
-- The image file referenced by `imageName` must exist in the `images\` subfolder
-- `captions` must not be empty (at least one generic caption is required as fallback)
-- Role-specific caption fields (`hookCaptions`, `painPointCaptions`, etc.) are optional
+- `appName` must not be empty
+- Every stage (`hook`, `painPoint`, `credibility`, `cta`) must have at least one `imageNames` entry and at least one `captions` entry
+- Every image file referenced in `imageNames` must exist in the `images\` subfolder
 - At least **1 enabled** myApp is required
 
 ---
@@ -637,19 +642,21 @@ If you don't have real app screenshots yet, generate colorful placeholder images
 dotnet run --project src\AppRadar -- setup --input input
 ```
 
-### 3. Generate a single-app marketing reel
+### 3. Generate marketing reels
+
+One reel is produced per enabled myApp entry in `input\myApps\description.json`:
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16
+dotnet run --project src\AppRadar -- generate --duration 16
 ```
 
-### 4. Generate a reel with narration audio (Windows)
+### 4. Generate reels with narration audio (Windows)
 
 ```powershell
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+dotnet run --project src\AppRadar -- generate --with-audio true
 ```
 
-Output files are written to `output\videos\`, `output\images\`, `output\audio\`, and `output\manifests\`.
+Output files are written to `output\<app-slug>\videos\`, `output\<app-slug>\images\`, `output\<app-slug>\audio\`, and `output\<app-slug>\manifests\` — one sub-folder per enabled myApp entry.
 
 ---
 
@@ -663,7 +670,8 @@ Generates one or more reel videos.
 appradar generate [options]
 
 Options:
-  --count <number>         Number of reels to generate (default: 1)
+  --count <number>         Ignored in StructuredMarketing mode — one reel is generated per
+                           enabled myApp entry. Has no effect unless --strategy legacy is used.
   --duration <seconds>     Minimum reel duration in seconds; overridden by narration length (default: 24)
   --seed <number>          Seed for deterministic output (optional)
   --fps <number>           Frames per second, overrides config (optional)
@@ -686,34 +694,31 @@ appradar setup [--input <path>]
 ## Example Commands (PowerShell)
 
 ```powershell
-# Generate 1 single-app reel, no audio
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16
+# Generate reels for all enabled myApp entries, no audio
+dotnet run --project src\AppRadar -- generate --duration 16
 
-# Generate a reel with Windows SAPI narration audio
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+# Generate reels with Windows SAPI narration audio
+dotnet run --project src\AppRadar -- generate --with-audio true
 
-# Generate a reel with Ollama LLM rewrite + Piper audio
+# Generate reels with Ollama LLM rewrite + Piper audio
 # (requires llm.enabled=true and audio.ttsProvider=Piper in config)
-dotnet run --project src\AppRadar -- generate --count 1 --with-audio true
+dotnet run --project src\AppRadar -- generate --with-audio true
 
 # Use the original legacy shuffle mode
-dotnet run --project src\AppRadar -- generate --count 1 --duration 24 --strategy legacy
+dotnet run --project src\AppRadar -- generate --duration 24 --strategy legacy
 
 # Deterministic output with seed
-dotnet run --project src\AppRadar -- generate --count 2 --duration 16 --seed 123
-
-# Generate 5 reels (each uses a different image of the same app)
-dotnet run --project src\AppRadar -- generate --count 5 --duration 16
+dotnet run --project src\AppRadar -- generate --duration 16 --seed 123
 
 # Custom input/output directories
-dotnet run --project src\AppRadar -- generate --count 1 --input .\input --output .\output
+dotnet run --project src\AppRadar -- generate --input .\input --output .\output
 
 # Generate placeholder images for testing
 dotnet run --project src\AppRadar -- setup --input input
 
 # Use explicit FFmpeg path via environment variable
 $env:FFMPEG_PATH = "C:\ffmpeg\bin\ffmpeg.exe"
-dotnet run --project src\AppRadar -- generate --count 1 --duration 16
+dotnet run --project src\AppRadar -- generate --duration 16
 ```
 
 ---
@@ -724,13 +729,13 @@ dotnet run --project src\AppRadar -- generate --count 1 --duration 16
 
 Each reel promotes **one app** using a deliberate 4-stage narrative:
 
-1. **SELECT** — Pick exactly 1 app entry from `myApps` (one image). Multiple entries for the same app with different screenshots are all eligible; one is selected per reel.
-2. **DRAFT** — Build a `ReelStoryDraft` with 4 stage texts from that app's caption pools (hook → pain → cred → CTA). Stage texts come from role-specific caption lists first, then generic captions, then built-in templates.
+1. **SELECT** — One app entry is picked from each enabled `myApps` entry. Each entry generates its own reel; the pipeline iterates over all enabled entries. (`--count` is ignored.)
+2. **DRAFT** — Build a `ReelStoryDraft` with 4 stage texts from that app's caption pools (hook → pain → cred → CTA). Stage texts come from role-specific caption lists first, then built-in templates.
 3. **REWRITE** *(optional, requires Ollama)* — A local LLM rewrites the 4 stage texts into one short spoken paragraph.
 4. **KEYWORDS** — A short keyword caption is resolved for each stage. When `llm.enabled` is `true` and the LLM call succeeds, Ollama generates a **4–8 word** caption per stage. Otherwise `KeywordCaptionProvider` is used: explicit keyword fields → tag-derived phrase → deterministic fallback (1–3 words).
 5. **TTS** *(optional)* — The full narration paragraph is synthesised to a WAV file.
 6. **MEASURE** — The actual WAV duration is read from the file header.
-7. **RENDER** — 4 slide images are generated from the **same base image**, each showing its keyword caption (bottom-aligned, no top overlay).
+7. **RENDER** — 4 slide images are generated, one per narrative stage. Each stage randomly selects one image from its own `imageNames` pool, so different stages may show different screenshots. Each slide displays its keyword caption (bottom-aligned, no top overlay).
 8. **COMPOSE** — FFmpeg composes the final MP4 with `slideleft` transitions. Total duration = audio duration + tail hold (not a fixed preset). Each of the 4 slides occupies an equal share of the total duration.
 
 ### How narration length drives reel duration
@@ -759,8 +764,8 @@ Passing `--strategy legacy` restores the original behaviour:
 ### Determinism
 
 When `--seed` is provided:
-- All random selections use a seeded `System.Random` instance
-- For multiple reels (`--count > 1`), reel N uses `seed + (N - 1)`
+- All random selections (app entry, per-stage image, caption) use a seeded `System.Random` instance
+- App N in the myApps list uses `seed + (N - 1)` so each app gets a unique but reproducible seed
 - Same seed always produces identical output
 
 ---
