@@ -99,4 +99,49 @@ public sealed class VideoComposerTests
             File.Delete(fakePath);
         }
     }
+
+    [Fact]
+    public void BuildFilterGraph_UsesDeterministicTransitionSequence()
+    {
+        var sequence = new List<string> { "slide", "zoom", "fadeUp", "parallax" };
+
+        var script = VideoComposer.BuildFilterGraph(
+            totalSlides: 5,
+            fps: 30,
+            secondsPerSlide: 3,
+            durationSeconds: 15,
+            width: 1080,
+            height: 1920,
+            transitionMs: 600,
+            transition: AppRadar.Models.TransitionStyle.Slide,
+            transitionSequence: sequence,
+            sequenceOffset: 0);
+
+        Assert.Contains("transition=slideleft", script, StringComparison.Ordinal);
+        Assert.Contains("transition=zoomin", script, StringComparison.Ordinal);
+        Assert.Contains("transition=fade", script, StringComparison.Ordinal);
+        Assert.Contains("transition=smoothleft", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildFilterGraphChunked_SequenceOffsetShiftsTransitionSelection()
+    {
+        var durations = new List<double> { 2.0, 2.0, 2.0 };
+        var sequence = new List<string> { "slide", "zoom", "fadeUp", "parallax" };
+
+        var script = VideoComposer.BuildFilterGraphChunked(
+            totalSlides: 3,
+            fps: 30,
+            durationSeconds: 6,
+            width: 1080,
+            height: 1920,
+            transitionMs: 600,
+            displayDurSec: durations,
+            transitionSequence: sequence,
+            sequenceOffset: 1);
+
+        Assert.Contains("transition=zoomin", script, StringComparison.Ordinal);
+        Assert.Contains("transition=fade", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("transition=slideleft", script, StringComparison.Ordinal);
+    }
 }

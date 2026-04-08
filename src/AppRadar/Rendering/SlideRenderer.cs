@@ -3,9 +3,11 @@ using AppRadar.Models;
 using Microsoft.Extensions.Logging;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SysPath = System.IO.Path;
 
 namespace AppRadar.Rendering;
 
@@ -27,7 +29,7 @@ public sealed class SlideRenderer
         _logger.LogInformation("Rendering slide {Slot}: {AppName}", slide.Slot, slide.AppName);
 
         var outputFileName = $"{generationId}_slide{slide.Slot:D2}.png";
-        var outputPath = Path.Combine(outputImagesDir, outputFileName);
+        var outputPath = SysPath.Combine(outputImagesDir, outputFileName);
 
         var width = config.Video.Width;
         var height = config.Video.Height;
@@ -36,11 +38,14 @@ public sealed class SlideRenderer
         var fit = LoadAndFit(slide.SourcePath, width, height);
         using var image = fit.Canvas;
 
-        // Draw bottom gradient overlay for readability
-        DrawBottomGradient(image, width, height, overlay);
+        // Measure caption first so the gradient can start where text begins.
+        var captionLayout = BuildCaptionLayout(slide.SelectedCaption, overlay, fit.ContentBounds);
 
-        // Draw caption text
-        DrawCaption(image, slide.SelectedCaption, overlay, fit.ContentBounds);
+        // Draw bottom gradient only from caption start down to avoid over-darkening.
+        DrawBottomGradient(image, fit.ContentBounds, captionLayout.TextBounds.Top, overlay);
+
+        // Draw caption text with pill treatment.
+        DrawCaption(image, slide.SelectedCaption, overlay, fit.ContentBounds, captionLayout);
 
         image.SaveAsPng(outputPath);
 
@@ -74,22 +79,32 @@ public sealed class SlideRenderer
         return (canvas, contentBounds);
     }
 
-    private static void DrawBottomGradient(Image<Rgba32> image, int width, int height, OverlayConfig overlay)
+    private static void DrawBottomGradient(
+        Image<Rgba32> image,
+        Rectangle contentBounds,
+        float captionTop,
+        OverlayConfig overlay)
     {
-        // Draw a semi-transparent gradient from bottom, covering roughly 40% of height
-        int gradientHeight = (int)(height * 0.40);
-        int gradientTop = height - gradientHeight;
+        float opacity = Math.Clamp(overlay.BottomGradientOpacity, 0f, 1f);
+        if (opacity <= 0f)
+            return;
+
+        int gradientTop = (int)MathF.Floor(MathF.Max(contentBounds.Top, captionTop));
+        int gradientBottom = contentBounds.Bottom;
+        int gradientHeight = gradientBottom - gradientTop;
+        if (gradientHeight <= 0)
+            return;
+
         byte maxAlpha = (byte)(overlay.BottomGradientOpacity * 255);
 
         image.Mutate(ctx =>
         {
-            // Draw gradient rows bottom-to-top, getting more transparent as we go up
             for (int y = 0; y < gradientHeight; y++)
             {
-                float t = (float)y / gradientHeight; // 0 = top of gradient, 1 = bottom
-                float easedT = t * t; // quadratic ease-in for nicer fade
+                float t = gradientHeight == 1 ? 1f : (float)y / (gradientHeight - 1);
+                float easedT = t * t;
                 byte alpha = (byte)(maxAlpha * easedT);
-                var rect = new Rectangle(0, gradientTop + (gradientHeight - 1 - y), width, 1);
+                var rect = new Rectangle(contentBounds.Left, gradientTop + y, contentBounds.Width, 1);
                 ctx.Fill(Color.FromRgba(0, 0, 0, alpha), rect);
             }
         });
@@ -152,11 +167,33 @@ public sealed class SlideRenderer
         Image<Rgba32> image,
         string caption,
         OverlayConfig overlay,
-        Rectangle contentBounds)
+        Rectangle contentBounds,
+        CaptionLayout layout)
     {
         var fontColor = ParseHexColor(overlay.FontColor);
-        var font = ResolveFont(overlay.FontFamily, overlay.FontSize);
 
+        image.Mutate(ctx =>
+        {
+            if (overlay.CaptionPillEnabled)
+            {
+                DrawCaptionPill(ctx, layout.TextBounds, contentBounds, overlay);
+            }
+
+            if (overlay.TextShadow)
+            {
+                ctx.DrawText(layout.ShadowOptions, caption, Color.FromRgba(0, 0, 0, 145));
+            }
+
+            ctx.DrawText(layout.TextOptions, caption, fontColor);
+        });
+    }
+
+    private static CaptionLayout BuildCaptionLayout(
+        string caption,
+        OverlayConfig overlay,
+        Rectangle contentBounds)
+    {
+        var font = ResolveFont(overlay.FontFamily, overlay.FontSize);
         float maxTextWidth = contentBounds.Width * overlay.MaxTextWidthPercent;
         float padding = overlay.Padding;
         float liftFactor = MathF.Max(overlay.CaptionLiftFactor, 0f);
@@ -176,24 +213,52 @@ public sealed class SlideRenderer
             Origin = new System.Numerics.Vector2(captionCenterX, captionBaselineY)
         };
 
-        image.Mutate(ctx =>
+        var shadowOptions = new RichTextOptions(font)
         {
-            if (overlay.TextShadow)
-            {
-                // Draw shadow slightly offset
-                var shadowOptions = new RichTextOptions(font)
-                {
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Bottom,
-                    WrappingLength = maxTextWidth,
-                    Origin = new System.Numerics.Vector2(captionCenterX + 3, captionBaselineY + 3)
-                };
-                ctx.DrawText(shadowOptions, caption, Color.FromRgba(0, 0, 0, 160));
-            }
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            WrappingLength = maxTextWidth,
+            Origin = new System.Numerics.Vector2(captionCenterX + 2, captionBaselineY + 2)
+        };
 
-            ctx.DrawText(textOptions, caption, fontColor);
-        });
+        var measuredText = TextMeasurer.MeasureBounds(caption, textOptions);
+        return new CaptionLayout(textOptions, shadowOptions, measuredText);
     }
+
+    private static void DrawCaptionPill(
+        IImageProcessingContext ctx,
+        FontRectangle textBounds,
+        Rectangle contentBounds,
+        OverlayConfig overlay)
+    {
+        float horizontalPad = MathF.Max(overlay.CaptionPillHorizontalPadding, 0);
+        float verticalPad = MathF.Max(overlay.CaptionPillVerticalPadding, 0);
+        float inset = 4f;
+
+        float left = MathF.Max(contentBounds.Left + inset, textBounds.Left - horizontalPad);
+        float top = MathF.Max(contentBounds.Top + inset, textBounds.Top - verticalPad);
+        float right = MathF.Min(contentBounds.Right - inset, textBounds.Right + horizontalPad);
+        float bottom = MathF.Min(contentBounds.Bottom - inset, textBounds.Bottom + verticalPad);
+
+        float width = MathF.Max(8f, right - left);
+        float height = MathF.Max(8f, bottom - top);
+        var pill = new RectangleF(left, top, width, height);
+        var fillColor = ParseHexColor(overlay.CaptionPillColor, overlay.CaptionPillOpacity);
+
+        ctx.Fill(fillColor, pill);
+
+        if (overlay.CaptionPillStrokeEnabled && overlay.CaptionPillStrokeWidth > 0f)
+        {
+            var strokeColor = ParseHexColor(overlay.CaptionPillStrokeColor, overlay.CaptionPillStrokeOpacity);
+            var pen = Pens.Solid(strokeColor, overlay.CaptionPillStrokeWidth);
+            ctx.Draw(pen, pill);
+        }
+    }
+
+    private readonly record struct CaptionLayout(
+        RichTextOptions TextOptions,
+        RichTextOptions ShadowOptions,
+        FontRectangle TextBounds);
 
     private static Font ResolveFont(string familyName, float size)
     {
@@ -226,16 +291,17 @@ public sealed class SlideRenderer
             "{ \"overlay\": { \"fontFamily\": \"Arial\" } }");
     }
 
-    private static Color ParseHexColor(string hex)
+    private static Color ParseHexColor(string hex, float opacity = 1f)
     {
         hex = hex.TrimStart('#');
+        byte alpha = (byte)(Math.Clamp(opacity, 0f, 1f) * 255);
         if (hex.Length == 6)
         {
             byte r = Convert.ToByte(hex[..2], 16);
             byte g = Convert.ToByte(hex[2..4], 16);
             byte b = Convert.ToByte(hex[4..6], 16);
-            return Color.FromRgb(r, g, b);
+            return Color.FromRgba(r, g, b, alpha);
         }
-        return Color.White;
+        return Color.FromRgba(255, 255, 255, alpha);
     }
 }

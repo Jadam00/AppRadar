@@ -7,6 +7,19 @@ namespace AppRadar.Video;
 public sealed class VideoComposer
 {
     private readonly ILogger<VideoComposer> _logger;
+    private static readonly IReadOnlyDictionary<string, string> TransitionAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["slide"] = "slideleft",
+            ["zoom"] = "zoomin",
+            ["fadeup"] = "fade",
+            ["parallax"] = "smoothleft",
+            ["fade"] = "fade",
+            ["crossfade"] = "fade",
+            ["slideleft"] = "slideleft",
+            ["zoomin"] = "zoomin",
+            ["smoothleft"] = "smoothleft"
+        };
 
     public VideoComposer(ILogger<VideoComposer> logger)
     {
@@ -278,7 +291,9 @@ public sealed class VideoComposer
 
             filterScript = BuildFilterGraphChunked(
                 slidePaths.Count, fps, durationSeconds,
-                width, height, transitionMs, displayDurSec);
+                width, height, transitionMs, displayDurSec,
+                config.Animation.TransitionSequence,
+                config.Animation.SequenceOffset);
         }
         else
         {
@@ -297,7 +312,9 @@ public sealed class VideoComposer
 
             filterScript = BuildFilterGraph(
                 totalSlides, fps, secondsPerSlide, durationSeconds,
-                width, height, transitionMs, transition);
+                width, height, transitionMs, transition,
+                config.Animation.TransitionSequence,
+                config.Animation.SequenceOffset);
         }
 
         var filterFile = Path.GetTempFileName();
@@ -407,7 +424,9 @@ public sealed class VideoComposer
         int width,
         int height,
         int transitionMs,
-        TransitionStyle transition)
+        TransitionStyle transition,
+        IReadOnlyList<string>? transitionSequence = null,
+        int sequenceOffset = 0)
     {
         var sb = new System.Text.StringBuilder();
 
@@ -430,13 +449,18 @@ public sealed class VideoComposer
 
         double segDuration = secondsPerSlide;
         double transitionDuration = transitionMs / 1000.0;
-        string transitionType = transition == TransitionStyle.Crossfade ? "fade" : "slideleft";
+        string fallbackTransition = transition == TransitionStyle.Crossfade ? "fade" : "slideleft";
 
         string prev = "v0";
         for (int i = 1; i < totalSlides; i++)
         {
             double offset = i * (segDuration - transitionDuration);
             if (offset < MinXfadeOffsetSeconds) offset = MinXfadeOffsetSeconds;
+            string transitionType = ResolveTransitionForBoundary(
+                transitionSequence,
+                i - 1,
+                sequenceOffset,
+                fallbackTransition);
 
             bool isLast = (i == totalSlides - 1);
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";
@@ -468,7 +492,9 @@ public sealed class VideoComposer
         int width,
         int height,
         int transitionMs,
-        IReadOnlyList<double> displayDurSec)
+        IReadOnlyList<double> displayDurSec,
+        IReadOnlyList<string>? transitionSequence = null,
+        int sequenceOffset = 0)
     {
         var sb = new System.Text.StringBuilder();
         double transitionSec = transitionMs / 1000.0;
@@ -501,12 +527,17 @@ public sealed class VideoComposer
         {
             cumulative += displayDurSec[i - 1];
             double offset = Math.Max(cumulative, MinXfadeOffsetSeconds);
+            string transitionType = ResolveTransitionForBoundary(
+                transitionSequence,
+                i - 1,
+                sequenceOffset,
+                "slideleft");
 
             bool isLast = i == totalSlides - 1;
             string outLabel = isLast ? "outv_raw" : $"tmp{i}";
 
             sb.AppendLine(
-                $"[{prev}][v{i}]xfade=transition=slideleft:" +
+                $"[{prev}][v{i}]xfade=transition={transitionType}:" +
                 $"duration={transitionSec:F3}:offset={offset:F3}[{outLabel}];");
             prev = outLabel;
         }
@@ -546,6 +577,32 @@ public sealed class VideoComposer
         }
 
         _logger.LogDebug("FFmpeg completed successfully");
+    }
+
+    private static string ResolveTransitionForBoundary(
+        IReadOnlyList<string>? transitionSequence,
+        int boundaryIndex,
+        int sequenceOffset,
+        string fallbackTransition)
+    {
+        if (transitionSequence is null || transitionSequence.Count == 0)
+            return fallbackTransition;
+
+        int count = transitionSequence.Count;
+        int normalizedOffset = sequenceOffset % count;
+        if (normalizedOffset < 0)
+            normalizedOffset += count;
+
+        int index = (boundaryIndex + normalizedOffset) % count;
+        string token = transitionSequence[index];
+
+        if (!string.IsNullOrWhiteSpace(token) &&
+            TransitionAliases.TryGetValue(token.Trim(), out var mapped))
+        {
+            return mapped;
+        }
+
+        return fallbackTransition;
     }
 }
 

@@ -60,11 +60,74 @@ public sealed class OverlayConfig
     /// Default 0.7.
     /// </summary>
     public float CaptionLiftFactor { get; set; } = 0.7f;
+
+    /// <summary>
+    /// Enables a rounded background pill behind captions for improved readability.
+    /// </summary>
+    public bool CaptionPillEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Pill background color in hex format.
+    /// </summary>
+    public string CaptionPillColor { get; set; } = "#000000";
+
+    /// <summary>
+    /// Pill background opacity (0.0 to 1.0).
+    /// </summary>
+    public float CaptionPillOpacity { get; set; } = 0.56f;
+
+    /// <summary>
+    /// Horizontal padding around caption text inside the pill.
+    /// </summary>
+    public int CaptionPillHorizontalPadding { get; set; } = 30;
+
+    /// <summary>
+    /// Vertical padding around caption text inside the pill.
+    /// </summary>
+    public int CaptionPillVerticalPadding { get; set; } = 20;
+
+    /// <summary>
+    /// Rounded corner radius for caption pill background.
+    /// </summary>
+    public float CaptionPillCornerRadius { get; set; } = 44f;
+
+    /// <summary>
+    /// Draws a subtle stroke around the pill when enabled.
+    /// </summary>
+    public bool CaptionPillStrokeEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Stroke color for caption pill in hex format.
+    /// </summary>
+    public string CaptionPillStrokeColor { get; set; } = "#FFFFFF";
+
+    /// <summary>
+    /// Stroke opacity (0.0 to 1.0) for caption pill border.
+    /// </summary>
+    public float CaptionPillStrokeOpacity { get; set; } = 0.16f;
+
+    /// <summary>
+    /// Stroke thickness in pixels for caption pill border.
+    /// </summary>
+    public float CaptionPillStrokeWidth { get; set; } = 2f;
 }
 
 public sealed class AnimationConfig
 {
     public int TransitionDurationMs { get; set; } = 600;
+
+    /// <summary>
+    /// Deterministic transition sequence used across slide boundaries.
+    /// Values are mapped to FFmpeg xfade transitions.
+    /// Supported aliases: slide, zoom, fadeUp, parallax, fade, crossfade.
+    /// </summary>
+    public List<string> TransitionSequence { get; set; } = ["slide", "zoom", "fadeUp", "parallax"];
+
+    /// <summary>
+    /// Optional offset applied before sequence modulo selection.
+    /// Useful for shifting sequence start while keeping deterministic behavior.
+    /// </summary>
+    public int SequenceOffset { get; set; } = 0;
 }
 
 /// <summary>

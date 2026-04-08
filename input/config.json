@@ -12,12 +12,24 @@
     "fontColor": "#FFFFFF",
     "padding": 64,
     "maxTextWidthPercent": 0.82,
-    "bottomGradientOpacity": 0,
+    "bottomGradientOpacity": 0.58,
     "textShadow": true,
-    "captionLiftFactor": 2
+    "captionLiftFactor": 2,
+    "captionPillEnabled": true,
+    "captionPillColor": "#000000",
+    "captionPillOpacity": 0.56,
+    "captionPillHorizontalPadding": 30,
+    "captionPillVerticalPadding": 20,
+    "captionPillCornerRadius": 44,
+    "captionPillStrokeEnabled": true,
+    "captionPillStrokeColor": "#FFFFFF",
+    "captionPillStrokeOpacity": 0.16,
+    "captionPillStrokeWidth": 2
   },
   "animation": {
-    "transitionDurationMs": 600
+    "transitionDurationMs": 600,
+    "transitionSequence": ["slide", "zoom", "fadeUp", "parallax"],
+    "sequenceOffset": 0
   },
   "tools": {
     "ffmpegPath": null,
