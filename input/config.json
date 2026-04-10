@@ -37,7 +37,7 @@
   },
   "audio": {
     "enabled": true,
-    "ttsProvider": "piper",
+    "ttsProvider": "Xtts",
     "voiceName": null,
     "rate": 0,
     "volume": 100,
@@ -55,6 +55,19 @@
       "pauseMarkerDefaultMs": 320,
       "pauseMarkerMinMs": 120,
       "pauseMarkerMaxMs": 1200
+    },
+    "xtts": {
+      "baseUrl": "http://localhost:8020",
+      "voicePath": "voices/brand",
+      "ttsPath": "/tts",
+      "healthPath": "/health",
+      "timeoutSeconds": 90,
+      "maxRetries": 2,
+      "retryBaseDelayMs": 500,
+      "startupWaitSeconds": 45,
+      "startupScriptPath": "temp/scripts/start_xtts_service.ps1",
+      "pythonCommand": "python",
+      "scriptPath": "tts-service/xtts_service.py"
     }
   },
   "strategy": {

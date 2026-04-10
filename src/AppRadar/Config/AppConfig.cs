@@ -244,6 +244,75 @@ public sealed class AudioConfig
     /// Piper TTS engine configuration. Required when <see cref="TtsProvider"/> is <c>"Piper"</c>.
     /// </summary>
     public PiperConfig Piper { get; set; } = new();
+
+    /// <summary>
+    /// XTTS v2 microservice configuration. Used when <see cref="TtsProvider"/> is <c>"Xtts"</c>.
+    /// </summary>
+    public XttsConfig Xtts { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for the local XTTS HTTP microservice.
+/// </summary>
+public sealed class XttsConfig
+{
+    /// <summary>
+    /// Base URL for the local XTTS service.
+    /// Example: http://localhost:8020
+    /// </summary>
+    public string BaseUrl { get; set; } = "http://localhost:8020";
+
+    /// <summary>
+    /// Relative or absolute path to the folder containing reference voice WAV files.
+    /// All .wav files in this directory are used as reference audio.
+    /// </summary>
+    public string VoicePath { get; set; } = "voices/brand";
+
+    /// <summary>
+    /// Service endpoint path for TTS requests.
+    /// </summary>
+    public string TtsPath { get; set; } = "/tts";
+
+    /// <summary>
+    /// Service endpoint path for health/readiness checks.
+    /// </summary>
+    public string HealthPath { get; set; } = "/health";
+
+    /// <summary>
+    /// Timeout for a single TTS request in seconds.
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 90;
+
+    /// <summary>
+    /// Number of retry attempts after the initial failed request.
+    /// </summary>
+    public int MaxRetries { get; set; } = 2;
+
+    /// <summary>
+    /// Initial delay in milliseconds for exponential backoff retries.
+    /// </summary>
+    public int RetryBaseDelayMs { get; set; } = 500;
+
+    /// <summary>
+    /// Time to wait for the auto-started XTTS service to become healthy.
+    /// </summary>
+    public int StartupWaitSeconds { get; set; } = 45;
+
+    /// <summary>
+    /// Optional startup script path for auto-starting the service.
+    /// Defaults to temp/scripts/start_xtts_service.ps1.
+    /// </summary>
+    public string StartupScriptPath { get; set; } = "temp/scripts/start_xtts_service.ps1";
+
+    /// <summary>
+    /// Python command used when startup script is not found.
+    /// </summary>
+    public string PythonCommand { get; set; } = "python";
+
+    /// <summary>
+    /// Path to xtts_service.py used when startup script is not found.
+    /// </summary>
+    public string ScriptPath { get; set; } = "tts-service/xtts_service.py";
 }
 
 /// <summary>

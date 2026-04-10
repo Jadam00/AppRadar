@@ -11,7 +11,7 @@
         ]
       },
       "painPoint": {
-        "imageNames": ["LvlFail_Dark.png", "InPlay_Light.png", "EasyLvl_Dark.png", "InPlay_Dark.png"],
+        "imageNames": ["LvlFail_Dark.png", "InPlay_Light.png", "EasyLvl_Dark.png", "InPlay_Dark.png", "Lvl4_Dark.png", "Lvl4_Light.png"],
         "captions": [
           "Most puzzle apps get boring fast",
           "You solve it once and there's nothing left to figure out",
@@ -19,7 +19,7 @@
         ]
       },
       "credibility": {
-        "imageNames": ["HardLvl_Dark.png"],
+        "imageNames": ["HardLvl_Dark.png", "Progress_Light.png", "Progress_Dark.png"],
         "captions": [
           "NeuroMaze generates a new challenge every time you play",
           "Pure logic. Pattern recognition. No guessing.",

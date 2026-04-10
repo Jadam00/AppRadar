@@ -1,0 +1,7 @@
+# torch is installed explicitly by Setup.ps1 from the PyTorch cu121 index
+# for deterministic NVIDIA GPU compatibility.
+TTS==0.22.0
+numpy>=1.24
+soundfile>=0.12
+# XTTS in TTS 0.22.0 relies on symbols removed in newer transformers.
+transformers==4.46.3

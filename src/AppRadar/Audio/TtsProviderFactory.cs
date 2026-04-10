@@ -44,8 +44,17 @@ public static class TtsProviderFactory
                 loggerFactory.CreateLogger<PiperTtsProvider>());
         }
 
+        if (name.Equals("Xtts", StringComparison.OrdinalIgnoreCase))
+        {
+            WarnIfSystemSpeechOnlyOptionsConfiguredForXtts(config, loggerFactory);
+
+            return new XttsTtsProvider(
+                config.Xtts,
+                loggerFactory.CreateLogger<XttsTtsProvider>());
+        }
+
         throw new NotSupportedException(
-            $"Unknown TTS provider: '{name}'. Supported values: SystemSpeech, Piper");
+            $"Unknown TTS provider: '{name}'. Supported values: SystemSpeech, Piper, Xtts");
     }
 
     private static void WarnIfSystemSpeechOnlyOptionsConfiguredForPiper(
@@ -72,6 +81,34 @@ public static class TtsProviderFactory
         {
             logger.LogWarning(
                 "audio.volume is ignored when ttsProvider is Piper. " +
+                "Use normalizeAudio and post-processing for loudness control.");
+        }
+    }
+
+    private static void WarnIfSystemSpeechOnlyOptionsConfiguredForXtts(
+        AudioConfig config,
+        ILoggerFactory loggerFactory)
+    {
+        var logger = loggerFactory.CreateLogger(typeof(TtsProviderFactory));
+
+        if (!string.IsNullOrWhiteSpace(config.VoiceName))
+        {
+            logger.LogWarning(
+                "audio.voiceName is ignored when ttsProvider is Xtts. " +
+                "Set voice references in audio.xtts.voicePath instead.");
+        }
+
+        if (config.Rate != 0)
+        {
+            logger.LogWarning(
+                "audio.rate is ignored when ttsProvider is Xtts. " +
+                "Tune pacing in text and service/model settings instead.");
+        }
+
+        if (config.Volume != 100)
+        {
+            logger.LogWarning(
+                "audio.volume is ignored when ttsProvider is Xtts. " +
                 "Use normalizeAudio and post-processing for loudness control.");
         }
     }

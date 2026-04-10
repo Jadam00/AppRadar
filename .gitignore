@@ -342,6 +342,12 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 **/__pycache__/
 *.pyc
+.venv-xtts/**
+!.venv-xtts/
+!.venv-xtts/Scripts/
+!.venv-xtts/Scripts/Activate.ps1
+.venv/
+venv/
 
 # Cake - Uncomment if you are using it
 #tools/**
@@ -418,13 +424,11 @@ FodyWeavers.xsd
 *.msp
 
 # AppRadar generated output (keep directory structure via .gitkeep)
-output/images/*.png
-output/images/*.jpg
-output/videos/*.mp4
-output/manifests/*.json
-temp/*
+output/**
+!output/**/.gitkeep
+temp/**
 !temp/.gitkeep
-logs/*.log
+logs/**
 !logs/.gitkeep
 
 # Sample generated placeholder images (users provide their own)

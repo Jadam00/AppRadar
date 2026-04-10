@@ -60,6 +60,22 @@ public sealed class TtsProviderFactoryTests
     }
 
     [Fact]
+    public void Create_WithXttsProvider_ReturnsXttsTtsProvider()
+    {
+        var config = new AudioConfig { TtsProvider = "Xtts" };
+        var provider = TtsProviderFactory.Create(config, NullLoggerFactory.Instance);
+        Assert.IsType<XttsTtsProvider>(provider);
+    }
+
+    [Fact]
+    public void Create_WithXttsProviderCaseInsensitive_ReturnsXttsTtsProvider()
+    {
+        var config = new AudioConfig { TtsProvider = "xtts" };
+        var provider = TtsProviderFactory.Create(config, NullLoggerFactory.Instance);
+        Assert.IsType<XttsTtsProvider>(provider);
+    }
+
+    [Fact]
     public void Create_WithPiperAndSystemSpeechOnlyOptions_LogsWarnings()
     {
         var loggerProvider = new CapturingLoggerProvider();
@@ -143,13 +159,14 @@ public sealed class TtsProviderFactoryTests
     }
 
     [Fact]
-    public void Create_ErrorMessage_ListsBothProviders()
+    public void Create_ErrorMessage_ListsSupportedProviders()
     {
         var config = new AudioConfig { TtsProvider = "Unknown" };
         var ex = Assert.Throws<NotSupportedException>(
             () => TtsProviderFactory.Create(config, NullLoggerFactory.Instance));
         Assert.Contains("SystemSpeech", ex.Message);
         Assert.Contains("Piper", ex.Message);
+        Assert.Contains("Xtts", ex.Message);
     }
 }
 

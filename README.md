@@ -70,6 +70,7 @@ All four stages are preserved as structured data in the manifest, regardless of 
 | **Windows 11 / Windows Server** | Required platform |
 | **.NET 10 SDK** | https://dotnet.microsoft.com/download/dotnet/10.0 |
 | **FFmpeg** | Used for video encoding and audio muxing — see [FFmpeg Setup](#ffmpeg-setup) |
+| **Python 3.10+** | Required for local XTTS v2 microservice |
 | **Ollama** *(optional)* | Local LLM server for narration rewriting — see [Ollama Setup](#ollama-setup-optional) |
 
 Verify your .NET SDK version in PowerShell:
@@ -364,6 +365,95 @@ Verify your Piper installation independently before using it with AppRadar:
 
 ---
 
+## XTTS v2 Setup
+
+XTTS v2 runs as a separate Python microservice that AppRadar calls over HTTP.
+This keeps Python-native model execution out of the C# process while preserving
+the same reel generation flow.
+
+### 1. Create a Python environment
+
+```powershell
+python -m venv .venv-xtts
+.\.venv-xtts\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install --index-url https://download.pytorch.org/whl/cu121 "torch>=2.4.0"
+python -m pip install -r tts-service\requirements.txt
+```
+
+For NVIDIA RTX 5090, Setup first installs a stable CUDA torch build and then auto-upgrades
+to a nightly `cu128` torch build when `sm_120` support is required.
+
+### 2. Prepare reference voice WAV files
+
+Put clean voice recordings in:
+
+```text
+voices\brand\
+```
+
+Rules:
+- All `.wav` files in `voices\brand` are used as reference voice inputs.
+- If multiple WAV files exist, the service merges them before synthesis.
+- AppRadar does not train models or generate new voices; it only clones from references.
+
+### 3. Start the XTTS service
+
+```powershell
+python tts-service\xtts_service.py --host localhost --port 8020
+```
+
+Or use the helper script:
+
+```powershell
+.\temp\scripts\start_xtts_service.ps1
+```
+
+### 4. Configure AppRadar to use XTTS
+
+Edit `input\config.json`:
+
+```json
+{
+  "audio": {
+    "enabled": true,
+    "ttsProvider": "Xtts",
+    "normalizeAudio": true,
+    "xtts": {
+      "baseUrl": "http://localhost:8020",
+      "voicePath": "voices/brand",
+      "ttsPath": "/tts",
+      "healthPath": "/health",
+      "timeoutSeconds": 90,
+      "maxRetries": 2,
+      "retryBaseDelayMs": 500,
+      "startupWaitSeconds": 45,
+      "startupScriptPath": "temp/scripts/start_xtts_service.ps1",
+      "pythonCommand": "python",
+      "scriptPath": "tts-service/xtts_service.py"
+    }
+  }
+}
+```
+
+When `audio.ttsProvider` is `"Xtts"`, AppRadar will auto-start the local service if
+it is not already running.
+
+### 5. XTTS troubleshooting
+
+| Error | Likely cause | Fix |
+|---|---|---|
+| `No .wav reference files found` | `voices/brand` is empty | Add one or more clean WAV reference files |
+| `Unable to reach XTTS service` | Service not running or wrong base URL | Verify service is running and `audio.xtts.baseUrl` matches host/port |
+| XTTS startup failures | Python env missing dependencies or wrong torch CUDA arch support | Activate venv, run `pip install --index-url https://download.pytorch.org/whl/cu121 "torch>=2.4.0"`, then for RTX 5090 run `pip install --pre --index-url https://download.pytorch.org/whl/nightly/cu128 torch`, then `pip install -r tts-service\requirements.txt` |
+| `cannot import name 'BeamSearchScorer' from 'transformers'` | `transformers` version too new for `TTS==0.22.0` | Reinstall XTTS deps from `tts-service\requirements.txt` (pins `transformers==4.46.3`) |
+| `_pickle.UnpicklingError` mentioning `weights_only` while loading XTTS checkpoint | Torch 2.6+ defaults changed for `torch.load` | Use the current `tts-service\xtts_service.py` (sets `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`) |
+| Slow synthesis | CPU fallback active | Use a CUDA-capable GPU, otherwise increase timeout |
+
+If XTTS is already running, AppRadar now waits for health checks before trying to auto-start another instance. This avoids duplicate-start attempts while a live XTTS process is already listening and warming up.
+
+---
+
 ## Setup Script
 
 Run `Setup.ps1` from the repository root to validate your environment:
@@ -378,6 +468,11 @@ It checks:
 - FFmpeg presence and version
 - Required input/output folders (creates them if missing)
 - Input metadata files
+- Config parsing and provider-specific validation
+- Python version compatibility for XTTS (`3.10 <= version < 3.12`)
+- Automatic `.venv-xtts` creation, explicit PyTorch CUDA install, and dependency installation from `tts-service/requirements.txt` (includes RTX 5090 nightly `cu128` fallback when `sm_120` is detected)
+- XTTS readiness checks (CUDA-capable torch, voice WAV files, service health endpoint)
+- Ollama service/model checks when `llm.enabled` is `true`
 - Project build
 
 To also generate placeholder images during setup:
@@ -434,6 +529,19 @@ To also generate placeholder images during setup:
       "lengthScale": 1.0,
       "noiseScale": 0.667,
       "noiseW": 0.8
+    },
+    "xtts": {
+      "baseUrl": "http://localhost:8020",
+      "voicePath": "voices/brand",
+      "ttsPath": "/tts",
+      "healthPath": "/health",
+      "timeoutSeconds": 90,
+      "maxRetries": 2,
+      "retryBaseDelayMs": 500,
+      "startupWaitSeconds": 45,
+      "startupScriptPath": "temp/scripts/start_xtts_service.ps1",
+      "pythonCommand": "python",
+      "scriptPath": "tts-service/xtts_service.py"
     }
   },
   "strategy": {
@@ -464,7 +572,7 @@ To also generate placeholder images during setup:
 | Field | Default | Description |
 |---|---|---|
 | `enabled` | `false` | Generate and mux narration audio into the MP4 |
-| `ttsProvider` | `"SystemSpeech"` | TTS backend: `"SystemSpeech"` (Windows SAPI) or `"Piper"` (Piper neural TTS) |
+| `ttsProvider` | `"SystemSpeech"` | TTS backend: `"SystemSpeech"` (Windows SAPI), `"Piper"` (Piper neural TTS), or `"Xtts"` (local XTTS v2 HTTP service) |
 | `voiceName` | `null` | SAPI voice name (e.g. `"Microsoft Zira Desktop"`). `null` = system default. Only used by `SystemSpeech`. |
 | `rate` | `0` | Speaking rate: `-10` (slowest) to `10` (fastest). Only used by `SystemSpeech`. |
 | `volume` | `100` | Volume 0–100. Only used by `SystemSpeech`. |
@@ -474,6 +582,9 @@ To also generate placeholder images during setup:
 
 For `"Piper"`, tune natural pacing with `audio.piper.lengthScale` (for example `1.0` to `1.1`).
 Use optional narration markers `[[pause]]` or `[[pause=400]]` to shape spoken rhythm.
+
+For `"Xtts"`, place reference files in `audio.xtts.voicePath` (default `voices/brand`).
+All `.wav` files in that folder are used as references for voice cloning.
 
 ### LLM (Ollama) configuration
 
