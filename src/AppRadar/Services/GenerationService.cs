@@ -18,6 +18,7 @@ public sealed class GenerationService
     private readonly SlideRenderer _slideRenderer;
     private readonly VideoComposer _videoComposer;
     private readonly ManifestWriter _manifestWriter;
+    private readonly BackgroundMusicMixer _backgroundMusicMixer;
     private readonly ILoggerFactory _loggerFactory;
 
     public GenerationService(
@@ -29,6 +30,7 @@ public sealed class GenerationService
         SlideRenderer slideRenderer,
         VideoComposer videoComposer,
         ManifestWriter manifestWriter,
+        BackgroundMusicMixer backgroundMusicMixer,
         ILoggerFactory loggerFactory)
     {
         _logger = logger;
@@ -39,6 +41,7 @@ public sealed class GenerationService
         _slideRenderer = slideRenderer;
         _videoComposer = videoComposer;
         _manifestWriter = manifestWriter;
+        _backgroundMusicMixer = backgroundMusicMixer;
         _loggerFactory = loggerFactory;
     }
 
@@ -199,6 +202,7 @@ public sealed class GenerationService
             if (config.Audio.Enabled)
             {
                 audioPath = TryGenerateNarration(slides, config, generationId, outputAudioDir, durationSeconds);
+                audioPath = TryAddBackgroundMusic(audioPath, config, generationId, outputAudioDir);
                 hasAudio = audioPath is not null;
                 if (hasAudio && audioPath is not null)
                     audioDurationMs = WavDurationReader.ReadDurationMs(audioPath);
@@ -293,6 +297,10 @@ public sealed class GenerationService
         {
             structuredAudioPath = TryGenerateSingleNarration(
                 narrationPlan.FullNarrationText, config, generationId, outputAudioDir);
+
+            structuredAudioPath = TryAddBackgroundMusic(
+                structuredAudioPath, config, generationId, outputAudioDir);
+
             structuredHasAudio = structuredAudioPath is not null;
 
             if (structuredHasAudio && structuredAudioPath is not null)
@@ -608,6 +616,34 @@ public sealed class GenerationService
         {
             _logger.LogError(ex, "TTS generation failed; producing silent video");
             return null;
+        }
+    }
+
+    private string? TryAddBackgroundMusic(
+        string? narrationPath,
+        AppConfig config,
+        string generationId,
+        string outputAudioDir)
+    {
+        if (narrationPath is null)
+            return null;
+
+        try
+        {
+            var ffmpegExe = _videoComposer.GetFfmpegPath(config);
+            var mixedPath = _backgroundMusicMixer.TryMixNarrationWithBackground(
+                narrationPath,
+                config.Audio,
+                ffmpegExe,
+                outputAudioDir,
+                generationId);
+
+            return mixedPath ?? narrationPath;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Background music mix failed; continuing with narration only");
+            return narrationPath;
         }
     }
 

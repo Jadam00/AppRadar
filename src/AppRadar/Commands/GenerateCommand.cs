@@ -1,4 +1,5 @@
 using System.CommandLine;
+using AppRadar.Audio;
 using AppRadar.Config;
 using AppRadar.Rendering;
 using AppRadar.Services;
@@ -79,6 +80,7 @@ public static class GenerateCommand
                     new SlideRenderer(loggerFactory.CreateLogger<SlideRenderer>()),
                     new VideoComposer(loggerFactory.CreateLogger<VideoComposer>()),
                     new ManifestWriter(loggerFactory.CreateLogger<ManifestWriter>()),
+                    new BackgroundMusicMixer(loggerFactory.CreateLogger<BackgroundMusicMixer>()),
                     loggerFactory);
 
                 var options = new GenerationOptions

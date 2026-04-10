@@ -44,6 +44,12 @@
     "leadInMs": 150,
     "gapBetweenSlidesMs": 300,
     "normalizeAudio": true,
+    "backgroundMusic": {
+      "enabled": true,
+      "folderPath": "backgroundMusic",
+      "selectionStrategy": "random",
+      "volumeMultiplier": 0.19
+    },
     "piper": {
       "exePath": "C:\\Program Files\\piper\\piper.exe",
       "modelPath": "C:\\Program Files\\piper\\models\\en_US-ryan-high.onnx",

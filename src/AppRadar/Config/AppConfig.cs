@@ -249,6 +249,39 @@ public sealed class AudioConfig
     /// XTTS v2 microservice configuration. Used when <see cref="TtsProvider"/> is <c>"Xtts"</c>.
     /// </summary>
     public XttsConfig Xtts { get; set; } = new();
+
+    /// <summary>
+    /// Optional background music mixed under narration.
+    /// </summary>
+    public BackgroundMusicConfig BackgroundMusic { get; set; } = new();
+}
+
+/// <summary>
+/// Configuration for background music mixed with narration.
+/// </summary>
+public sealed class BackgroundMusicConfig
+{
+    /// <summary>
+    /// When true, AppRadar attempts to mix background music under narration.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Folder containing candidate background music files.
+    /// Only .wav files are considered.
+    /// </summary>
+    public string FolderPath { get; set; } = "backgroundMusic";
+
+    /// <summary>
+    /// Selection strategy for picking a track: "random" or "cycle".
+    /// </summary>
+    public string SelectionStrategy { get; set; } = "random";
+
+    /// <summary>
+    /// Background music volume multiplier used before mixing.
+    /// 1.0 = unchanged, lower values are quieter.
+    /// </summary>
+    public double VolumeMultiplier { get; set; } = 0.16;
 }
 
 /// <summary>
