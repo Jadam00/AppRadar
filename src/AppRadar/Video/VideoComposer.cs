@@ -1,6 +1,7 @@
 using AppRadar.Config;
 using AppRadar.Models;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
 
 namespace AppRadar.Video;
 
@@ -289,11 +290,15 @@ public sealed class VideoComposer
                 inputArgs.Add($"-loop 1 -t {inputSec:F3} -i \"{slidePaths[i]}\"");
             }
 
+            var transitionSequence = ResolveTransitionSequenceForChunked(slidePaths.Count, config.Animation);
+
             filterScript = BuildFilterGraphChunked(
                 slidePaths.Count, fps, durationSeconds,
                 width, height, transitionMs, displayDurSec,
-                config.Animation.TransitionSequence,
-                config.Animation.SequenceOffset);
+                transitionSequence,
+                config.Animation.SequenceOffset,
+                config.Animation.CinematicMotionEnabled,
+                config.Animation.CinematicMotionZoomScale);
         }
         else
         {
@@ -314,7 +319,9 @@ public sealed class VideoComposer
                 totalSlides, fps, secondsPerSlide, durationSeconds,
                 width, height, transitionMs, transition,
                 config.Animation.TransitionSequence,
-                config.Animation.SequenceOffset);
+                config.Animation.SequenceOffset,
+                config.Animation.CinematicMotionEnabled,
+                config.Animation.CinematicMotionZoomScale);
         }
 
         var filterFile = Path.GetTempFileName();
@@ -426,19 +433,23 @@ public sealed class VideoComposer
         int transitionMs,
         TransitionStyle transition,
         IReadOnlyList<string>? transitionSequence = null,
-        int sequenceOffset = 0)
+        int sequenceOffset = 0,
+        bool cinematicMotionEnabled = false,
+        double cinematicMotionZoomScale = 1.0)
     {
         var sb = new System.Text.StringBuilder();
 
-        // No vertical motion: contain-fit and center-pad so the full image stays visible.
+        int motionFrames = Math.Max(1, (int)Math.Round((double)secondsPerSlide * fps));
+
         for (int i = 0; i < totalSlides; i++)
         {
-            sb.AppendLine(
-                $"[{i}:v]" +
-            $"scale={width}:{height}:force_original_aspect_ratio=decrease," +
-            $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black," +
-                $"setpts=PTS-STARTPTS" +
-                $"[v{i}];");
+            sb.AppendLine(BuildMotionFilterLine(
+                i,
+                width,
+                height,
+                cinematicMotionEnabled,
+                cinematicMotionZoomScale,
+                motionFrames));
         }
 
         if (totalSlides == 1)
@@ -494,20 +505,26 @@ public sealed class VideoComposer
         int transitionMs,
         IReadOnlyList<double> displayDurSec,
         IReadOnlyList<string>? transitionSequence = null,
-        int sequenceOffset = 0)
+        int sequenceOffset = 0,
+        bool cinematicMotionEnabled = false,
+        double cinematicMotionZoomScale = 1.0)
     {
         var sb = new System.Text.StringBuilder();
         double transitionSec = transitionMs / 1000.0;
 
-        // No vertical motion: contain-fit and center-pad so the full image stays visible.
         for (int i = 0; i < totalSlides; i++)
         {
-            sb.AppendLine(
-                $"[{i}:v]" +
-            $"scale={width}:{height}:force_original_aspect_ratio=decrease," +
-            $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black," +
-                $"setpts=PTS-STARTPTS" +
-                $"[v{i}];");
+            bool isLast = i == totalSlides - 1;
+            double inputDurationSec = isLast ? displayDurSec[i] : displayDurSec[i] + transitionSec;
+            int motionFrames = Math.Max(1, (int)Math.Round(inputDurationSec * fps));
+
+            sb.AppendLine(BuildMotionFilterLine(
+                i,
+                width,
+                height,
+                cinematicMotionEnabled,
+                cinematicMotionZoomScale,
+                motionFrames));
         }
 
         if (totalSlides == 1)
@@ -603,6 +620,75 @@ public sealed class VideoComposer
         }
 
         return fallbackTransition;
+    }
+
+    private static IReadOnlyList<string>? ResolveTransitionSequenceForChunked(
+        int totalSlides,
+        AnimationConfig animation)
+    {
+        if (animation.StructuredStageTransitionsEnabled &&
+            totalSlides == 5 &&
+            animation.StructuredStageTransitionSequence.Count > 0)
+        {
+            return animation.StructuredStageTransitionSequence;
+        }
+
+        return animation.TransitionSequence;
+    }
+
+    private static string BuildMotionFilterLine(
+        int inputIndex,
+        int width,
+        int height,
+        bool cinematicMotionEnabled,
+        double cinematicMotionZoomScale,
+        int motionFrames)
+    {
+        if (!cinematicMotionEnabled || cinematicMotionZoomScale <= 1.0001)
+        {
+            return
+                $"[{inputIndex}:v]" +
+                $"scale={width}:{height}:force_original_aspect_ratio=decrease," +
+                $"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black," +
+                $"setpts=PTS-STARTPTS" +
+                $"[v{inputIndex}];";
+        }
+
+        double zoom = Math.Clamp(cinematicMotionZoomScale, 1.01, 1.25);
+        int scaledWidth = (int)Math.Ceiling(width * zoom);
+        int scaledHeight = (int)Math.Ceiling(height * zoom);
+
+        string frameSpan = Math.Max(1, motionFrames - 1).ToString(CultureInfo.InvariantCulture);
+        var profile = (MotionProfile)(inputIndex % 4);
+
+        string xExpr = profile switch
+        {
+            MotionProfile.PushRight => $"(in_w-out_w)*n/{frameSpan}",
+            MotionProfile.PushLeft => $"(in_w-out_w)*(1-n/{frameSpan})",
+            _ => "(in_w-out_w)/2"
+        };
+
+        string yExpr = profile switch
+        {
+            MotionProfile.DriftDown => $"(in_h-out_h)*n/{frameSpan}",
+            MotionProfile.DriftUp => $"(in_h-out_h)*(1-n/{frameSpan})",
+            _ => "(in_h-out_h)/2"
+        };
+
+        return
+            $"[{inputIndex}:v]" +
+            $"scale={scaledWidth}:{scaledHeight}:force_original_aspect_ratio=increase," +
+            $"crop={width}:{height}:x='{xExpr}':y='{yExpr}'," +
+            $"setpts=PTS-STARTPTS" +
+            $"[v{inputIndex}];";
+    }
+
+    private enum MotionProfile
+    {
+        PushRight,
+        PushLeft,
+        DriftUp,
+        DriftDown
     }
 }
 

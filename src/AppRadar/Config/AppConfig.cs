@@ -117,6 +117,31 @@ public sealed class AnimationConfig
     public int TransitionDurationMs { get; set; } = 600;
 
     /// <summary>
+    /// Enables camera-like motion on still slides during composition to avoid static
+    /// slideshow feel. When false, slides remain center-fitted and static.
+    /// </summary>
+    public bool CinematicMotionEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Zoom factor used by cinematic motion.
+    /// 1.0 disables zoom; typical values are 1.04–1.14.
+    /// </summary>
+    public double CinematicMotionZoomScale { get; set; } = 1.1;
+
+    /// <summary>
+    /// In structured mode, prefer a stage-oriented transition family sequence over the
+    /// generic transition sequence for the 5-slot timeline boundaries.
+    /// </summary>
+    public bool StructuredStageTransitionsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Transition aliases used for structured 5-slot boundaries.
+    /// Boundary order: slot1→2, slot2→3, slot3→4, slot4→5.
+    /// </summary>
+    public List<string> StructuredStageTransitionSequence { get; set; } =
+        ["zoom", "slide", "parallax", "fadeUp"];
+
+    /// <summary>
     /// Deterministic transition sequence used across slide boundaries.
     /// Values are mapped to FFmpeg xfade transitions.
     /// Supported aliases: slide, zoom, fadeUp, parallax, fade, crossfade.

@@ -28,6 +28,10 @@
   },
   "animation": {
     "transitionDurationMs": 600,
+    "cinematicMotionEnabled": true,
+    "cinematicMotionZoomScale": 1.1,
+    "structuredStageTransitionsEnabled": true,
+    "structuredStageTransitionSequence": ["zoom", "slide", "parallax", "fadeUp"],
     "transitionSequence": ["slide", "zoom", "fadeUp", "parallax"],
     "sequenceOffset": 0
   },

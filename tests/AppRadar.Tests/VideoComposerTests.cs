@@ -144,4 +144,45 @@ public sealed class VideoComposerTests
         Assert.Contains("transition=fade", script, StringComparison.Ordinal);
         Assert.DoesNotContain("transition=slideleft", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildFilterGraph_EnablesCinematicMotion_WhenConfigured()
+    {
+        var script = VideoComposer.BuildFilterGraph(
+            totalSlides: 3,
+            fps: 30,
+            secondsPerSlide: 4,
+            durationSeconds: 12,
+            width: 1080,
+            height: 1920,
+            transitionMs: 600,
+            transition: AppRadar.Models.TransitionStyle.Slide,
+            transitionSequence: new List<string> { "slide", "zoom" },
+            sequenceOffset: 0,
+            cinematicMotionEnabled: true,
+            cinematicMotionZoomScale: 1.1);
+
+        Assert.Contains("crop=1080:1920", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("pad=1080:1920", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildFilterGraphChunked_DisablesCinematicMotion_WhenOff()
+    {
+        var script = VideoComposer.BuildFilterGraphChunked(
+            totalSlides: 3,
+            fps: 30,
+            durationSeconds: 9,
+            width: 1080,
+            height: 1920,
+            transitionMs: 600,
+            displayDurSec: new List<double> { 3.0, 3.0, 3.0 },
+            transitionSequence: new List<string> { "slide" },
+            sequenceOffset: 0,
+            cinematicMotionEnabled: false,
+            cinematicMotionZoomScale: 1.1);
+
+        Assert.Contains("pad=1080:1920", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("crop=1080:1920", script, StringComparison.Ordinal);
+    }
 }
