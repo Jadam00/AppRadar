@@ -32,6 +32,13 @@ public sealed class ReelSlidePlan
     /// <summary>Which narrative role this slide plays.</summary>
     public SlideRole Role { get; set; }
 
+    /// <summary>
+    /// Which narrative stage text this slide aligns to for timing/caption intent.
+    /// This can differ from <see cref="Role"/> when a visual stage is reused while
+    /// narration continues from another stage.
+    /// </summary>
+    public SlideRole NarrationRole { get; set; }
+
     /// <summary>The app source (image + metadata) to use for this slide.</summary>
     public AppSource Source { get; set; } = null!;
 

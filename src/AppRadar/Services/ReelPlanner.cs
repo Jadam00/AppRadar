@@ -10,7 +10,8 @@ namespace AppRadar.Services;
 /// Single-app mode (default):
 ///   Selects exactly ONE app. Each narrative stage then randomly selects one image
 ///   (Hook, PainPoint, Credibility, CTA) are drawn from that single app's caption
-///   pools. The result is a cohesive one-app mini-advert.
+///   pools. Stage 2 visuals are intentionally doubled into two consecutive slots.
+///   The result is a cohesive one-app mini-advert.
 ///
 /// The four stages are:
 ///   1. Hook        — Stop the scroll; tension / curiosity / bold claim
@@ -125,7 +126,9 @@ public sealed class ReelPlanner
         var ctaCaption = SelectCaption(selectedSource, SlideRole.Cta, rng, usedTexts);
 
         var hookImage = SelectStageImage(selectedSource, SlideRole.Hook, rng);
-        var painImage = SelectStageImage(selectedSource, SlideRole.PainPoint, rng);
+        var painImages = SelectStageImages(selectedSource, SlideRole.PainPoint, rng, 2);
+        var painImageLead = painImages[0];
+        var painImageMain = painImages[1];
         var credImage = SelectStageImage(selectedSource, SlideRole.Credibility, rng);
         var ctaImage = SelectStageImage(selectedSource, SlideRole.Cta, rng);
 
@@ -141,7 +144,8 @@ public sealed class ReelPlanner
             StageImageNames = new Dictionary<string, string>
             {
                 [SlideRole.Hook.ToString()] = hookImage.ImageName,
-                [SlideRole.PainPoint.ToString()] = painImage.ImageName,
+                [SlideRole.PainPoint.ToString()] = painImageLead.ImageName,
+                [$"{SlideRole.PainPoint}Secondary"] = painImageMain.ImageName,
                 [SlideRole.Credibility.ToString()] = credImage.ImageName,
                 [SlideRole.Cta.ToString()] = ctaImage.ImageName
             },
@@ -156,7 +160,12 @@ public sealed class ReelPlanner
         var transition = TransitionStyle.Slide;
         _logger.LogInformation("Transition: {Transition}", transition);
 
-        // Assemble plan — each stage uses its own randomly selected image from stage pool.
+        // Assemble plan with Stage 2 doubled:
+        // 1) Hook visual + Hook narration
+        // 2) PainPoint visual + Hook narration (extension)
+        // 3) PainPoint visual + PainPoint narration (different Stage 2 image when available)
+        // 4) Credibility visual + Credibility narration
+        // 5) Cta visual + Cta narration
         return new ReelPlan
         {
             Transition = transition,
@@ -164,10 +173,11 @@ public sealed class ReelPlanner
             StoryDraft = storyDraft,
             Slides =
             [
-                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImage, secondsPerSlide),
-                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImage, secondsPerSlide),
-                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImage, secondsPerSlide),
-                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImage, secondsPerSlide),
+                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImage, secondsPerSlide, SlideRole.Hook),
+                MakeSlidePlan(SlideRole.PainPoint, selectedSource, hookCaption, painImageLead, secondsPerSlide, SlideRole.Hook, hookCaption),
+                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImageMain, secondsPerSlide, SlideRole.PainPoint),
+                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImage, secondsPerSlide, SlideRole.Credibility),
+                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImage, secondsPerSlide, SlideRole.Cta),
             ]
         };
     }
@@ -231,6 +241,14 @@ public sealed class ReelPlanner
 
     private static StageImageCandidate SelectStageImage(AppSource source, SlideRole role, Random rng)
     {
+        return SelectStageImages(source, role, rng, 1)[0];
+    }
+
+    private static List<StageImageCandidate> SelectStageImages(AppSource source, SlideRole role, Random rng, int count)
+    {
+        if (count <= 0)
+            throw new ArgumentOutOfRangeException(nameof(count), "Image selection count must be at least 1.");
+
         if (!source.StageImageCandidates.TryGetValue(role, out var candidates) || candidates.Count == 0)
         {
             var stage = GetStageContent(source.Entry, role);
@@ -248,7 +266,24 @@ public sealed class ReelPlanner
                 .ToList();
         }
 
-        return candidates[rng.Next(candidates.Count)];
+        if (count == 1)
+            return [candidates[rng.Next(candidates.Count)]];
+
+        // Prefer distinct images when available; otherwise intentionally reuse.
+        var shuffled = candidates.OrderBy(_ => rng.Next()).ToList();
+        var selected = new List<StageImageCandidate>(count);
+
+        foreach (var candidate in shuffled)
+        {
+            selected.Add(candidate);
+            if (selected.Count == count)
+                return selected;
+        }
+
+        while (selected.Count < count)
+            selected.Add(candidates[rng.Next(candidates.Count)]);
+
+        return selected;
     }
 
     private static string BuildTemplate(AppEntry entry, SlideRole role, Random rng)
@@ -350,16 +385,19 @@ public sealed class ReelPlanner
         AppSource source,
         string caption,
         StageImageCandidate selectedImage,
-        int durationSeconds)
+        int durationSeconds,
+        SlideRole narrationRole,
+        string? narrationText = null)
     {
         return new ReelSlidePlan
         {
             Role = role,
+            NarrationRole = narrationRole,
             Source = source,
             ImageName = selectedImage.ImageName,
             SourcePath = selectedImage.ImagePath,
             DisplayCaption = caption,
-            NarrationText = caption,   // default: narration mirrors the on-screen copy
+            NarrationText = narrationText ?? caption,
             DurationSeconds = durationSeconds
         };
     }

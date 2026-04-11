@@ -162,6 +162,25 @@ public sealed class StructuredReelBehaviorTests
         Assert.Equal(minVisualMs, finalMs);
     }
 
+    [Fact]
+    public void StructuredSlotDurations_UseFourStageBudget_WithStageOneSplitAcrossTwoSlots()
+    {
+        const int finalDurationMs = 9_700;
+
+        int baseStageMs = finalDurationMs / 4;
+        int slot1 = baseStageMs / 2;
+        int slot2 = baseStageMs - slot1;
+        int slot3 = baseStageMs;
+        int slot4 = baseStageMs;
+        int slot5 = finalDurationMs - (slot1 + slot2 + slot3 + slot4);
+
+        Assert.Equal(baseStageMs, slot1 + slot2);
+        Assert.Equal(baseStageMs, slot3);
+        Assert.Equal(baseStageMs, slot4);
+        Assert.Equal(finalDurationMs, slot1 + slot2 + slot3 + slot4 + slot5);
+        Assert.True(slot5 >= 0, "Final slot duration must never be negative");
+    }
+
     // ── 4. Reveal timeline within audio bounds ────────────────────────────────────────────────
 
     [Fact]

@@ -169,6 +169,7 @@ public sealed class GenerationService
         var generationId = $"reel_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid().ToString("N")[..8]}";
 
         List<SlideSelection> slides;
+        List<ReelSlidePlan> plannedSlides = [];
         TransitionStyle transition;
         string strategyMode;
         ReelStoryDraft? storyDraft = null;
@@ -249,9 +250,10 @@ public sealed class GenerationService
             transition = plan.Transition; // always TransitionStyle.Slide
             strategyMode = "StructuredMarketing";
             storyDraft = plan.StoryDraft;
+            plannedSlides = plan.Slides;
 
             // Capture the selected app entry for keyword caption generation
-            selectedAppEntry = plan.Slides.Count > 0 ? plan.Slides[0].Source.Entry : null;
+            selectedAppEntry = plannedSlides.Count > 0 ? plannedSlides[0].Source.Entry : null;
 
             // ── LLM rewrite ───────────────────────────────────────────────────────────────────
             if (storyDraft is not null)
@@ -270,9 +272,9 @@ public sealed class GenerationService
                 plan.NarrationPlan = narrationPlan;
             }
 
-            // Build 4-role story slides for the manifest (captures the narrative context).
+            // Build story slides for the manifest (captures the narrative context).
             // SelectedCaption is set to the keyword caption for each stage.
-            slides = plan.Slides.Select((p, idx) => new SlideSelection
+            slides = plannedSlides.Select((p, idx) => new SlideSelection
             {
                 Slot = idx + 1,
                 Role = p.Role,
@@ -280,7 +282,7 @@ public sealed class GenerationService
                 AppName = p.Source.Entry.AppName,
                 ImageName = p.ImageName,
                 SelectedCaption = p.DisplayCaption,
-                NarrationText = narrationPlan?.FullNarrationText ?? p.NarrationText,
+                NarrationText = p.NarrationText,
                 OverlayCaptionSource = "story-draft",
                 SourcePath = p.SourcePath
             }).ToList();
@@ -347,34 +349,26 @@ public sealed class GenerationService
             narrationPlan.DisplayChunks = revealChunks;
         }
 
-        // ── Render 4 keyword-caption slides ───────────────────────────────────────────────────
-        // One PNG per narrative stage — keyword caption (1–3 words), equal time per slide.
-        // Narration audio plays over all 4 slides unchanged.
-        _logger.LogInformation("Rendering 4 keyword-caption slides...");
+        // ── Render planned keyword-caption slides ─────────────────────────────────────────────
+        // Stage 1 occupies two visual slots and shares one stage timing budget.
+        _logger.LogInformation("Rendering {Count} keyword-caption slides...", slides.Count);
 
         var structuredSlidePaths = new List<string>();
         string appName = storyDraft?.AppName ?? (slides.Count > 0 ? slides[0].AppName : string.Empty);
         AppSourceType sourceType = slides.Count > 0 ? slides[0].SourceType : AppSourceType.MyApp;
 
-        // Divide total duration equally across the 4 stages; absorb remainder in the last slide.
-        int msPerSlide = finalStructuredDurationMs / 4;
-        int remainderMs = finalStructuredDurationMs - (msPerSlide * 3);
-        var keywordDurationsMs = new List<int>
-        {
-            msPerSlide,
-            msPerSlide,
-            msPerSlide,
-            remainderMs
-        };
+        // Preserve a 4-stage timing budget while rendering 5 visual slots:
+        // stage1 is split across slots 1 and 2, then stages 2/3/4 map to slots 3/4/5.
+        var keywordDurationsMs = BuildStructuredSlotDurations(finalStructuredDurationMs);
 
-        var stageRoles = new[] { SlideRole.Hook, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta };
         var stageCaptionProvider = CaptionRewriteProviderFactory.CreateStageCaptionProvider(config.Llm, _loggerFactory);
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < slides.Count; i++)
         {
-            var role = stageRoles[i];
+            var visualRole = plannedSlides.Count > i ? plannedSlides[i].Role : SlideRole.Cta;
+            var captionRole = plannedSlides.Count > i ? plannedSlides[i].NarrationRole : visualRole;
             var fallbackCaption = selectedAppEntry is not null
-                ? KeywordCaptionProvider.GetCaptionForStage(role, selectedAppEntry)
-                : KeywordCaptionProvider.GetFallbackCaption(role, appName);
+                ? KeywordCaptionProvider.GetCaptionForStage(captionRole, selectedAppEntry)
+                : KeywordCaptionProvider.GetFallbackCaption(captionRole, appName);
 
             var overlayCaption = fallbackCaption;
             var captionSource = "fallback-keyword";
@@ -384,7 +378,7 @@ public sealed class GenerationService
                 try
                 {
                     var llmCaption = Task.Run(
-                        () => stageCaptionProvider.GenerateCaptionAsync(role, storyDraft)).GetAwaiter().GetResult();
+                        () => stageCaptionProvider.GenerateCaptionAsync(captionRole, storyDraft)).GetAwaiter().GetResult();
                     if (!string.IsNullOrWhiteSpace(llmCaption))
                     {
                         overlayCaption = llmCaption;
@@ -398,14 +392,14 @@ public sealed class GenerationService
                     _logger.LogWarning(
                         ex,
                         "Slide caption LLM failed for {Stage}; using fallback caption.",
-                        role);
+                        captionRole);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(
                         ex,
                         "Unexpected slide caption error for {Stage}; using fallback caption.",
-                        role);
+                        captionRole);
                 }
             }
 
@@ -418,7 +412,7 @@ public sealed class GenerationService
             var keywordSlide = new SlideSelection
             {
                 Slot = i + 1,
-                Role = role,
+                Role = visualRole,
                 AppName = appName,
                 ImageName = slides.Count > i ? slides[i].ImageName : string.Empty,
                 SelectedCaption = overlayCaption,
@@ -536,6 +530,22 @@ public sealed class GenerationService
         audioDurationMs > 0
             ? audioDurationMs
             : Math.Max(0, finalDurationMs - tailHoldMs);
+
+    /// <summary>
+    /// Splits total reel duration into 5 display slots while preserving a 4-stage budget.
+    /// Slot1+Slot2 consume stage 1 time, and slots 3-5 map directly to stages 2-4.
+    /// </summary>
+    private static List<int> BuildStructuredSlotDurations(int finalDurationMs)
+    {
+        int baseStageMs = finalDurationMs / 4;
+        int slot1 = baseStageMs / 2;
+        int slot2 = baseStageMs - slot1;
+        int slot3 = baseStageMs;
+        int slot4 = baseStageMs;
+        int slot5 = finalDurationMs - (slot1 + slot2 + slot3 + slot4);
+
+        return [slot1, slot2, slot3, slot4, slot5];
+    }
 
     /// <summary>
     /// Generates TTS narration from a single full narration paragraph.

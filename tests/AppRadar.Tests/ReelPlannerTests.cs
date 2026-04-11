@@ -93,13 +93,13 @@ public sealed class ReelPlannerTests
     // ── Structure tests ───────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Plan_ReturnsFourSlides()
+    public void Plan_ReturnsFiveSlides()
     {
         var planner = CreatePlanner();
         var plan = planner.Plan(
             CreateFeaturedSources(5), CreateMyAppSources(2), new Random(1));
 
-        Assert.Equal(4, plan.Slides.Count);
+        Assert.Equal(5, plan.Slides.Count);
     }
 
     [Fact]
@@ -111,8 +111,15 @@ public sealed class ReelPlannerTests
 
         Assert.Equal(SlideRole.Hook, plan.Slides[0].Role);
         Assert.Equal(SlideRole.PainPoint, plan.Slides[1].Role);
-        Assert.Equal(SlideRole.Credibility, plan.Slides[2].Role);
-        Assert.Equal(SlideRole.Cta, plan.Slides[3].Role);
+        Assert.Equal(SlideRole.PainPoint, plan.Slides[2].Role);
+        Assert.Equal(SlideRole.Credibility, plan.Slides[3].Role);
+        Assert.Equal(SlideRole.Cta, plan.Slides[4].Role);
+
+        Assert.Equal(SlideRole.Hook, plan.Slides[0].NarrationRole);
+        Assert.Equal(SlideRole.Hook, plan.Slides[1].NarrationRole);
+        Assert.Equal(SlideRole.PainPoint, plan.Slides[2].NarrationRole);
+        Assert.Equal(SlideRole.Credibility, plan.Slides[3].NarrationRole);
+        Assert.Equal(SlideRole.Cta, plan.Slides[4].NarrationRole);
     }
 
     [Fact]
@@ -194,7 +201,7 @@ public sealed class ReelPlannerTests
     }
 
     [Fact]
-    public void Plan_NoDuplicateCaptionsAcrossSlides()
+    public void Plan_OnlyStageOneCaptionIsDuplicatedAcrossSlides()
     {
         var planner = CreatePlanner();
         var featured = CreateFeaturedSources(5);
@@ -203,9 +210,11 @@ public sealed class ReelPlannerTests
         for (int seed = 0; seed < 30; seed++)
         {
             var plan = planner.Plan(featured, myApps, new Random(seed));
-            var captions = plan.Slides.Select(s => s.DisplayCaption).ToList();
-            var distinct = captions.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            Assert.Equal(captions.Count, distinct.Count);
+            Assert.Equal(plan.Slides[0].DisplayCaption, plan.Slides[1].DisplayCaption);
+
+            var nonHookCaptions = plan.Slides.Skip(2).Select(s => s.DisplayCaption).ToList();
+            var distinct = nonHookCaptions.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            Assert.Equal(nonHookCaptions.Count, distinct.Count);
         }
     }
 
@@ -272,9 +281,10 @@ public sealed class ReelPlannerTests
 
         // Each role should select from its dedicated pool
         Assert.Equal("HOOK: Stop everything right now!", plan.Slides[0].DisplayCaption);
-        Assert.Equal("PAIN: Every app wastes your time",  plan.Slides[1].DisplayCaption);
-        Assert.Equal("CRED: These tools actually work",   plan.Slides[2].DisplayCaption);
-        Assert.Equal("CTA: Download it and win",          plan.Slides[3].DisplayCaption);
+        Assert.Equal("HOOK: Stop everything right now!", plan.Slides[1].DisplayCaption);
+        Assert.Equal("PAIN: Every app wastes your time",  plan.Slides[2].DisplayCaption);
+        Assert.Equal("CRED: These tools actually work",   plan.Slides[3].DisplayCaption);
+        Assert.Equal("CTA: Download it and win",          plan.Slides[4].DisplayCaption);
     }
 
     [Fact]
@@ -300,12 +310,13 @@ public sealed class ReelPlannerTests
             var plan = planner.Plan(featured, myApps, new Random(seed));
 
             Assert.Contains(plan.Slides[0].DisplayCaption, richApp.Entry.HookCaptions!);
-            Assert.Contains(plan.Slides[1].DisplayCaption, richApp.Entry.PainPointCaptions!);
-            Assert.Contains(plan.Slides[2].DisplayCaption, richApp.Entry.CredibilityCaptions!);
-            Assert.Contains(plan.Slides[3].DisplayCaption, richApp.Entry.CtaCaptions!);
+            Assert.Contains(plan.Slides[1].DisplayCaption, richApp.Entry.HookCaptions!);
+            Assert.Contains(plan.Slides[2].DisplayCaption, richApp.Entry.PainPointCaptions!);
+            Assert.Contains(plan.Slides[3].DisplayCaption, richApp.Entry.CredibilityCaptions!);
+            Assert.Contains(plan.Slides[4].DisplayCaption, richApp.Entry.CtaCaptions!);
 
             seenHook.Add(plan.Slides[0].DisplayCaption);
-            seenPain.Add(plan.Slides[1].DisplayCaption);
+            seenPain.Add(plan.Slides[2].DisplayCaption);
         }
 
         Assert.True(seenHook.Count > 1,
@@ -436,7 +447,7 @@ public sealed class ReelPlannerTests
     {
         var planner = CreatePlanner();
         var plan = planner.Plan(CreateFeaturedSources(3), CreateMyAppSources(1), new Random(5));
-        Assert.Equal(4, plan.Slides.Count);
+        Assert.Equal(5, plan.Slides.Count);
         // All slides use the single myApp
         Assert.All(plan.Slides, s => Assert.Equal(AppSourceType.MyApp, s.Source.SourceType));
     }
@@ -446,9 +457,77 @@ public sealed class ReelPlannerTests
     {
         var planner = CreatePlanner();
         var plan = planner.Plan(CreateFeaturedSources(5), [], new Random(5));
-        Assert.Equal(4, plan.Slides.Count);
+        Assert.Equal(5, plan.Slides.Count);
         // All slides use a featured app as fallback
         Assert.All(plan.Slides, s => Assert.Equal(AppSourceType.Featured, s.Source.SourceType));
+    }
+
+    [Fact]
+    public void Plan_UsesDifferentPainPointImages_WhenAvailable()
+    {
+        var planner = CreatePlanner();
+
+        var app = new AppSource
+        {
+            Entry = new AppEntry
+            {
+                AppName = "DoublePainApp",
+                Tags = ["utility"],
+                Hook = new StageContent
+                {
+                    ImageNames = ["hook.png"],
+                    Captions = ["HOOK"]
+                },
+                PainPoint = new StageContent
+                {
+                    ImageNames = ["painA.png", "painB.png"],
+                    Captions = ["PAIN"]
+                },
+                Credibility = new StageContent
+                {
+                    ImageNames = ["cred.png"],
+                    Captions = ["CRED"]
+                },
+                Cta = new StageContent
+                {
+                    ImageNames = ["cta.png"],
+                    Captions = ["CTA"]
+                }
+            },
+            SourceType = AppSourceType.MyApp,
+            ImagePath = "/fake/default.png"
+        };
+
+        var plan = planner.Plan([], [app], new Random(1));
+
+        Assert.Equal("painA.png", plan.Slides[1].ImageName);
+        Assert.Equal("painB.png", plan.Slides[2].ImageName);
+    }
+
+    [Fact]
+    public void Plan_ReusesPainPointImage_WhenOnlyOneExists()
+    {
+        var planner = CreatePlanner();
+
+        var app = new AppSource
+        {
+            Entry = new AppEntry
+            {
+                AppName = "SinglePainImageApp",
+                Tags = ["utility"],
+                Hook = new StageContent { ImageNames = ["hook.png"], Captions = ["HOOK"] },
+                PainPoint = new StageContent { ImageNames = ["painOnly.png"], Captions = ["PAIN"] },
+                Credibility = new StageContent { ImageNames = ["cred.png"], Captions = ["CRED"] },
+                Cta = new StageContent { ImageNames = ["cta.png"], Captions = ["CTA"] }
+            },
+            SourceType = AppSourceType.MyApp,
+            ImagePath = "/fake/default.png"
+        };
+
+        var plan = planner.Plan([], [app], new Random(2));
+
+        Assert.Equal("painOnly.png", plan.Slides[1].ImageName);
+        Assert.Equal("painOnly.png", plan.Slides[2].ImageName);
     }
 
     [Fact]

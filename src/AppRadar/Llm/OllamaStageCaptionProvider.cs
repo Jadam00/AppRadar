@@ -46,7 +46,7 @@ public sealed class OllamaStageCaptionProvider : IStageCaptionProvider
             $"Tags: {draft.Tags}\n" +
             $"Stage: {stage}\n" +
             $"Stage source text: {stageText}\n\n" +
-            "Write one short overlay caption for this stage. Maximum 5 words.";
+            "Write one short overlay caption for this stage.Between 3 and 6 words.";
 
         var requestBody = new OllamaGenerateRequest
         {
@@ -84,11 +84,11 @@ public sealed class OllamaStageCaptionProvider : IStageCaptionProvider
 
         var cleaned = NormalizeCaption(rawText);
         var wordCount = CountWords(cleaned);
-        if (wordCount < 4)
+        if (wordCount < 3)
             throw new CaptionRewriteException("Generated stage caption is too short after normalization.");
 
-        if (wordCount > 8)
-            cleaned = TrimToWordCount(cleaned, 8);
+        if (wordCount > 6)
+            cleaned = TrimToWordCount(cleaned, 6);
 
         _logger.LogInformation(
             "Generated stage caption for {Stage}: {Caption}",
