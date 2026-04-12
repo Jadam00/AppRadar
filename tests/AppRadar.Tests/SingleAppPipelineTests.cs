@@ -8,7 +8,7 @@ namespace AppRadar.Tests;
 
 /// <summary>
 /// Tests that verify the full single-app pipeline contract:
-/// one app, 5 visual slots, 4 narrative stages preserved.
+/// one app, 8 visual slots, 4 narrative stages preserved.
 /// </summary>
 public sealed class SingleAppPipelineTests
 {
@@ -79,19 +79,31 @@ public sealed class SingleAppPipelineTests
     }
 
     [Fact]
-    public void Plan_SlideSlotsAreOrdered_WithDoubledStageTwoVisuals()
+    public void Plan_SlideSlotsAreOrdered_WithTwoSlidesPerStage()
     {
         var planner = CreatePlanner();
         var plan = planner.Plan([], new List<AppSource> { MakeMyApp() }, new Random(42));
 
         var roles = plan.Slides.Select(s => s.Role).ToList();
         Assert.Equal(
-            new[] { SlideRole.Hook, SlideRole.PainPoint, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta },
+            new[]
+            {
+                SlideRole.Hook, SlideRole.Hook,
+                SlideRole.PainPoint, SlideRole.PainPoint,
+                SlideRole.Credibility, SlideRole.Credibility,
+                SlideRole.Cta, SlideRole.Cta
+            },
             roles);
 
         var narrationRoles = plan.Slides.Select(s => s.NarrationRole).ToList();
         Assert.Equal(
-            new[] { SlideRole.Hook, SlideRole.Hook, SlideRole.PainPoint, SlideRole.Credibility, SlideRole.Cta },
+            new[]
+            {
+                SlideRole.Hook, SlideRole.Hook,
+                SlideRole.PainPoint, SlideRole.PainPoint,
+                SlideRole.Credibility, SlideRole.Credibility,
+                SlideRole.Cta, SlideRole.Cta
+            },
             narrationRoles);
     }
 

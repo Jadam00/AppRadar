@@ -11,7 +11,8 @@
         ]
       },
       "painPoint": {
-        "imageNames": ["InPlay_Light.png", "EasyLvl_Dark.png", "InPlay_Dark.png", "Lvl4_Dark.png", "Lvl4_Light.png", "LvlFail_Dark.png"],
+        "imageNames": ["level_010_partial_light.png", "level_010_partial_dark.png", "level_010_fail_light.png", "level_010_fail_dark.png",
+          "06_level_complete.png", "InPlay_Light.png", "EasyLvl_Dark.png", "InPlay_Dark.png", "Lvl4_Dark.png", "Lvl4_Light.png", "LvlFail_Dark.png"],
         "captions": [
           "Most puzzle apps get boring fast",
           "You solve it once and there's nothing left to figure out",
@@ -19,7 +20,9 @@
         ]
       },
       "credibility": {
-        "imageNames": ["HardLvl_Dark.png", "Progress_Light.png", "Progress_Dark.png", "NmNLvl120.jpg"],
+        "imageNames": ["level_120_partial_light.png", 
+          "level_170_fail_dark.png", "level_170_fail_light.png", "level_170_partial_dark.png", "level_170_partial_light.png", 
+          "level_070_partial_light.png", "level_070_partial_dark.png", "level_120_fail_dark.png", "level_120_fail_light.png"],
         "captions": [
           "NeuroMaze generates a new challenge every time you play",
           "Pure logic. Pattern recognition. No guessing.",
@@ -27,7 +30,7 @@
         ]
       },
       "cta": {
-        "imageNames": ["NNCTA.png"],
+        "imageNames": ["NNCTA.png", "FeaturedImage.png"],
         "captions": [
           "Prove your smart with NeuroMaze: Numbers Block Path",
           "Download NeuroMaze: Numbers Block Path if you're not scared",

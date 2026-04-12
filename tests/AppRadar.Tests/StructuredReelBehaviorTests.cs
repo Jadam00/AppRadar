@@ -163,22 +163,28 @@ public sealed class StructuredReelBehaviorTests
     }
 
     [Fact]
-    public void StructuredSlotDurations_UseFourStageBudget_WithStageOneSplitAcrossTwoSlots()
+    public void StructuredSlotDurations_UseFourStageBudget_WithEachStageSplitAcrossTwoSlots()
     {
         const int finalDurationMs = 9_700;
 
         int baseStageMs = finalDurationMs / 4;
-        int slot1 = baseStageMs / 2;
-        int slot2 = baseStageMs - slot1;
-        int slot3 = baseStageMs;
-        int slot4 = baseStageMs;
-        int slot5 = finalDurationMs - (slot1 + slot2 + slot3 + slot4);
+        int hookA = baseStageMs / 2;
+        int hookB = baseStageMs - hookA;
+        int painA = baseStageMs / 2;
+        int painB = baseStageMs - painA;
+        int credA = baseStageMs / 2;
+        int credB = baseStageMs - credA;
+        int ctaBudget = finalDurationMs - (baseStageMs * 3);
+        int ctaA = ctaBudget / 2;
+        int ctaB = ctaBudget - ctaA;
 
-        Assert.Equal(baseStageMs, slot1 + slot2);
-        Assert.Equal(baseStageMs, slot3);
-        Assert.Equal(baseStageMs, slot4);
-        Assert.Equal(finalDurationMs, slot1 + slot2 + slot3 + slot4 + slot5);
-        Assert.True(slot5 >= 0, "Final slot duration must never be negative");
+        Assert.Equal(baseStageMs, hookA + hookB);
+        Assert.Equal(baseStageMs, painA + painB);
+        Assert.Equal(baseStageMs, credA + credB);
+        Assert.Equal(ctaBudget, ctaA + ctaB);
+        Assert.Equal(finalDurationMs, hookA + hookB + painA + painB + credA + credB + ctaA + ctaB);
+        Assert.True(ctaA >= 0, "Final stage first slot duration must never be negative");
+        Assert.True(ctaB >= 0, "Final stage second slot duration must never be negative");
     }
 
     // ── 4. Reveal timeline within audio bounds ────────────────────────────────────────────────

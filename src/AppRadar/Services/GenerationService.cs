@@ -350,15 +350,15 @@ public sealed class GenerationService
         }
 
         // ── Render planned keyword-caption slides ─────────────────────────────────────────────
-        // Stage 1 occupies two visual slots and shares one stage timing budget.
+        // Each narrative stage occupies two visual slots while keeping the same stage-time budget.
         _logger.LogInformation("Rendering {Count} keyword-caption slides...", slides.Count);
 
         var structuredSlidePaths = new List<string>();
         string appName = storyDraft?.AppName ?? (slides.Count > 0 ? slides[0].AppName : string.Empty);
         AppSourceType sourceType = slides.Count > 0 ? slides[0].SourceType : AppSourceType.MyApp;
 
-        // Preserve a 4-stage timing budget while rendering 5 visual slots:
-        // stage1 is split across slots 1 and 2, then stages 2/3/4 map to slots 3/4/5.
+        // Preserve a 4-stage timing budget while rendering 8 visual slots:
+        // each stage is split across two slots.
         var keywordDurationsMs = BuildStructuredSlotDurations(finalStructuredDurationMs);
 
         var stageCaptionProvider = CaptionRewriteProviderFactory.CreateStageCaptionProvider(config.Llm, _loggerFactory);
@@ -532,19 +532,24 @@ public sealed class GenerationService
             : Math.Max(0, finalDurationMs - tailHoldMs);
 
     /// <summary>
-    /// Splits total reel duration into 5 display slots while preserving a 4-stage budget.
-    /// Slot1+Slot2 consume stage 1 time, and slots 3-5 map directly to stages 2-4.
+    /// Splits total reel duration into 8 display slots while preserving a 4-stage budget.
+    /// Each stage budget is split across two visual slots.
     /// </summary>
     private static List<int> BuildStructuredSlotDurations(int finalDurationMs)
     {
         int baseStageMs = finalDurationMs / 4;
-        int slot1 = baseStageMs / 2;
-        int slot2 = baseStageMs - slot1;
-        int slot3 = baseStageMs;
-        int slot4 = baseStageMs;
-        int slot5 = finalDurationMs - (slot1 + slot2 + slot3 + slot4);
+        int hookA = baseStageMs / 2;
+        int hookB = baseStageMs - hookA;
+        int painA = baseStageMs / 2;
+        int painB = baseStageMs - painA;
+        int credA = baseStageMs / 2;
+        int credB = baseStageMs - credA;
 
-        return [slot1, slot2, slot3, slot4, slot5];
+        int ctaBudget = finalDurationMs - (baseStageMs * 3);
+        int ctaA = ctaBudget / 2;
+        int ctaB = ctaBudget - ctaA;
+
+        return [hookA, hookB, painA, painB, credA, credB, ctaA, ctaB];
     }
 
     /// <summary>

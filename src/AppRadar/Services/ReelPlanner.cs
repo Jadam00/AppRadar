@@ -8,9 +8,8 @@ namespace AppRadar.Services;
 /// single selected app.
 ///
 /// Single-app mode (default):
-///   Selects exactly ONE app. Each narrative stage then randomly selects one image
-///   (Hook, PainPoint, Credibility, CTA) are drawn from that single app's caption
-///   pools. Stage 2 visuals are intentionally doubled into two consecutive slots.
+///   Selects exactly ONE app. Each narrative stage then draws from that single app's
+///   caption pools and renders as two visual slots.
 ///   The result is a cohesive one-app mini-advert.
 ///
 /// The four stages are:
@@ -125,12 +124,19 @@ public sealed class ReelPlanner
         var credCaption = SelectCaption(selectedSource, SlideRole.Credibility, rng, usedTexts);
         var ctaCaption = SelectCaption(selectedSource, SlideRole.Cta, rng, usedTexts);
 
-        var hookImage = SelectStageImage(selectedSource, SlideRole.Hook, rng);
+        var hookImages = SelectStageImages(selectedSource, SlideRole.Hook, rng, 2);
         var painImages = SelectStageImages(selectedSource, SlideRole.PainPoint, rng, 2);
-        var painImageLead = painImages[0];
-        var painImageMain = painImages[1];
-        var credImage = SelectStageImage(selectedSource, SlideRole.Credibility, rng);
-        var ctaImage = SelectStageImage(selectedSource, SlideRole.Cta, rng);
+        var credImages = SelectStageImages(selectedSource, SlideRole.Credibility, rng, 2);
+        var ctaImages = SelectStageImages(selectedSource, SlideRole.Cta, rng, 2);
+
+        var hookImagePrimary = hookImages[0];
+        var hookImageSecondary = hookImages[1];
+        var painImagePrimary = painImages[0];
+        var painImageSecondary = painImages[1];
+        var credImagePrimary = credImages[0];
+        var credImageSecondary = credImages[1];
+        var ctaImagePrimary = ctaImages[0];
+        var ctaImageSecondary = ctaImages[1];
 
         _logger.LogInformation("Hook caption       : \"{Caption}\"", hookCaption);
         _logger.LogInformation("PainPoint caption  : \"{Caption}\"", painCaption);
@@ -143,11 +149,14 @@ public sealed class ReelPlanner
             AppName = selectedSource.Entry.AppName,
             StageImageNames = new Dictionary<string, string>
             {
-                [SlideRole.Hook.ToString()] = hookImage.ImageName,
-                [SlideRole.PainPoint.ToString()] = painImageLead.ImageName,
-                [$"{SlideRole.PainPoint}Secondary"] = painImageMain.ImageName,
-                [SlideRole.Credibility.ToString()] = credImage.ImageName,
-                [SlideRole.Cta.ToString()] = ctaImage.ImageName
+                [SlideRole.Hook.ToString()] = hookImagePrimary.ImageName,
+                [$"{SlideRole.Hook}Secondary"] = hookImageSecondary.ImageName,
+                [SlideRole.PainPoint.ToString()] = painImagePrimary.ImageName,
+                [$"{SlideRole.PainPoint}Secondary"] = painImageSecondary.ImageName,
+                [SlideRole.Credibility.ToString()] = credImagePrimary.ImageName,
+                [$"{SlideRole.Credibility}Secondary"] = credImageSecondary.ImageName,
+                [SlideRole.Cta.ToString()] = ctaImagePrimary.ImageName,
+                [$"{SlideRole.Cta}Secondary"] = ctaImageSecondary.ImageName
             },
             Tags = string.Join(", ", selectedSource.Entry.Tags),
             HookText = hookCaption,
@@ -160,12 +169,11 @@ public sealed class ReelPlanner
         var transition = TransitionStyle.Slide;
         _logger.LogInformation("Transition: {Transition}", transition);
 
-        // Assemble plan with Stage 2 doubled:
-        // 1) Hook visual + Hook narration
-        // 2) PainPoint visual + Hook narration (extension)
-        // 3) PainPoint visual + PainPoint narration (different Stage 2 image when available)
-        // 4) Credibility visual + Credibility narration
-        // 5) Cta visual + Cta narration
+        // Assemble plan with two visuals per stage while preserving four narration stages:
+        // 1-2) Hook
+        // 3-4) PainPoint
+        // 5-6) Credibility
+        // 7-8) CTA
         return new ReelPlan
         {
             Transition = transition,
@@ -173,11 +181,14 @@ public sealed class ReelPlanner
             StoryDraft = storyDraft,
             Slides =
             [
-                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImage, secondsPerSlide, SlideRole.Hook),
-                MakeSlidePlan(SlideRole.PainPoint, selectedSource, hookCaption, painImageLead, secondsPerSlide, SlideRole.Hook, hookCaption),
-                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImageMain, secondsPerSlide, SlideRole.PainPoint),
-                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImage, secondsPerSlide, SlideRole.Credibility),
-                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImage, secondsPerSlide, SlideRole.Cta),
+                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImagePrimary, secondsPerSlide, SlideRole.Hook),
+                MakeSlidePlan(SlideRole.Hook, selectedSource, hookCaption, hookImageSecondary, secondsPerSlide, SlideRole.Hook),
+                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImagePrimary, secondsPerSlide, SlideRole.PainPoint),
+                MakeSlidePlan(SlideRole.PainPoint, selectedSource, painCaption, painImageSecondary, secondsPerSlide, SlideRole.PainPoint),
+                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImagePrimary, secondsPerSlide, SlideRole.Credibility),
+                MakeSlidePlan(SlideRole.Credibility, selectedSource, credCaption, credImageSecondary, secondsPerSlide, SlideRole.Credibility),
+                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImagePrimary, secondsPerSlide, SlideRole.Cta),
+                MakeSlidePlan(SlideRole.Cta, selectedSource, ctaCaption, ctaImageSecondary, secondsPerSlide, SlideRole.Cta),
             ]
         };
     }
