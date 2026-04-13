@@ -38,14 +38,17 @@ public sealed class SlideRenderer
         var fit = LoadAndFit(slide.SourcePath, width, height);
         using var image = fit.Canvas;
 
-        // Measure caption first so the gradient can start where text begins.
-        var captionLayout = BuildCaptionLayout(slide.SelectedCaption, overlay, fit.ContentBounds);
+        if (!string.IsNullOrWhiteSpace(slide.SelectedCaption))
+        {
+            // Measure caption first so the gradient can start where text begins.
+            var captionLayout = BuildCaptionLayout(slide.SelectedCaption, overlay, fit.ContentBounds);
 
-        // Draw bottom gradient only from caption start down to avoid over-darkening.
-        DrawBottomGradient(image, fit.ContentBounds, captionLayout.TextBounds.Top, overlay);
+            // Draw bottom gradient only from caption start down to avoid over-darkening.
+            DrawBottomGradient(image, fit.ContentBounds, captionLayout.TextBounds.Top, overlay);
 
-        // Draw caption text with pill treatment.
-        DrawCaption(image, slide.SelectedCaption, overlay, fit.ContentBounds, captionLayout);
+            // Draw caption text with pill treatment.
+            DrawCaption(image, slide.SelectedCaption, overlay, fit.ContentBounds, captionLayout);
+        }
 
         image.SaveAsPng(outputPath);
 

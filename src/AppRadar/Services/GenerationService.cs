@@ -10,6 +10,8 @@ namespace AppRadar.Services;
 
 public sealed class GenerationService
 {
+    private const string CtaCaptionSuppressedSource = "disabled-stage-cta";
+
     private readonly ILogger<GenerationService> _logger;
     private readonly MetadataLoader _metadataLoader;
     private readonly MetadataValidator _validator;
@@ -366,14 +368,15 @@ public sealed class GenerationService
         {
             var visualRole = plannedSlides.Count > i ? plannedSlides[i].Role : SlideRole.Cta;
             var captionRole = plannedSlides.Count > i ? plannedSlides[i].NarrationRole : visualRole;
+            var suppressOverlayCaption = captionRole == SlideRole.Cta;
             var fallbackCaption = selectedAppEntry is not null
                 ? KeywordCaptionProvider.GetCaptionForStage(captionRole, selectedAppEntry)
                 : KeywordCaptionProvider.GetFallbackCaption(captionRole, appName);
 
-            var overlayCaption = fallbackCaption;
-            var captionSource = "fallback-keyword";
+            var overlayCaption = suppressOverlayCaption ? string.Empty : fallbackCaption;
+            var captionSource = suppressOverlayCaption ? CtaCaptionSuppressedSource : "fallback-keyword";
 
-            if (stageCaptionProvider is not null && storyDraft is not null)
+            if (!suppressOverlayCaption && stageCaptionProvider is not null && storyDraft is not null)
             {
                 try
                 {
